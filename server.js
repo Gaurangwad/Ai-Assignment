@@ -1,6 +1,5 @@
 import express from 'express';
 import path from 'path';
-import fs from 'fs';
 import { fileURLToPath } from 'url';
 import {
   DEPARTMENTS, PRIORITIES, STATUSES,
@@ -15,11 +14,7 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'public')));
-
-// First run convenience: auto-seed if the store is empty.
-if (!fs.existsSync(path.join(__dirname, 'data.json'))) {
-  await import('./lib/seed.js');
-}
+// The store auto-seeds itself on first load, so there's nothing to do here.
 
 const asyncH = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
   console.error(e);
@@ -97,8 +92,14 @@ app.get('/api/stats', (req, res) => {
   res.json(stats());
 });
 
-app.listen(PORT, () => {
-  const ai = aiStatus();
-  console.log(`Helpdesk running on http://localhost:${PORT}`);
-  console.log(`AI layer: ${ai.enabled ? `Claude (${ai.model})` : 'heuristic fallback (set ANTHROPIC_API_KEY for Claude)'}`);
-});
+// Only start a listener when run directly (local dev). On Vercel/serverless the
+// platform imports the exported app as the request handler instead.
+if (!process.env.VERCEL) {
+  app.listen(PORT, () => {
+    const ai = aiStatus();
+    console.log(`Helpdesk running on http://localhost:${PORT}`);
+    console.log(`AI layer: ${ai.enabled ? `Claude (${ai.model})` : 'heuristic fallback (set ANTHROPIC_API_KEY for Claude)'}`);
+  });
+}
+
+export default app;
