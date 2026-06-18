@@ -285,10 +285,14 @@ button { font: inherit; }
 .bubble ol.steps li { margin: 4px 0; }
 .bubble .kb-link { display: inline-flex; align-items: center; gap: 6px; margin-top: 8px; color: var(--accent); text-decoration: none; font-size: 13px; font-weight: 600; }
 .bubble .kb-link:hover { text-decoration: underline; }
-.bubble-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
+.hint-line { margin-top: 10px; font-size: 12px; color: var(--muted); font-style: italic; }
+.bubble-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .bubble-actions button { border-radius: 8px; padding: 8px 13px; font-size: 13px; font-weight: 600; cursor: pointer; border: 1px solid var(--line); background: var(--surface); }
+.bubble-actions button:disabled { opacity: .7; cursor: default; }
 .bubble-actions .self { background: var(--green); color: #fff; border-color: var(--green); }
 .bubble-actions .self:hover { filter: brightness(.96); }
+.bubble-actions .done { color: #1d7a42; border-color: #bfe8cd; background: var(--green-soft); }
+.bubble-actions .done:hover { filter: brightness(.98); }
 .bubble-actions .raise { color: var(--accent); border-color: #cfe0ff; }
 .bubble-actions .raise:hover { background: var(--accent-soft); }
 .bubble .past { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; font-size: 12px; color: var(--muted); }

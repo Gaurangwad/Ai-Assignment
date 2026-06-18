@@ -118,7 +118,7 @@ function renderBotAnswer(r) {
     addBubble('bot warn', `<div class="botline">${ICON.ai('#a9700a', 15)} Assistant</div>${esc(r.reply)}`);
     return;
   }
-  let html = `<div class="botline">${ICON.ai('#2f6df6', 15)} Assistant${r.resolved ? `<span class="resolved-tag">No ticket needed</span>` : ''}</div>${esc(r.reply)}`;
+  let html = `<div class="botline">${ICON.ai('#2f6df6', 15)} Assistant${r.resolved ? `<span class="resolved-tag">Quick fix</span>` : ''}</div>${esc(r.reply)}`;
   if (r.article && r.article.steps && r.article.steps.length) {
     html += `<ol class="steps">${r.article.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`;
     if (r.article.link) {
@@ -128,29 +128,53 @@ function renderBotAnswer(r) {
   if (r.similar && r.similar.length) {
     html += `<div class="past">Past resolved cases: ${r.similar.map((s) => `<b>${esc(s.title)}</b> (${s.match}%)`).join(', ')}.</div>`;
   }
+  // Suggestions are never applied automatically — the employee decides.
+  html += `<div class="hint-line">This is just a suggestion — it's your call. Accept it, or raise a ticket for a person to help.</div>`;
   html += `<div class="bubble-actions">`;
-  if (r.action) html += `<button class="self" data-action="${esc(r.action.id)}">${esc(r.action.label)}</button>`;
-  html += `<button class="raise">Raise a ticket instead</button></div>`;
+  if (r.action) html += `<button class="self" data-act="accept">${esc(r.action.label)}</button>`;
+  else if (r.resolved) html += `<button class="done" data-act="solved">This solved it</button>`;
+  html += `<button class="raise">${r.resolved || r.action ? 'No, raise a ticket' : 'Raise a ticket'}</button></div>`;
 
   const bubble = addBubble('bot', html);
   const self = bubble.querySelector('.self');
-  if (self) self.onclick = () => runSelfService(self.dataset.action, self);
+  if (self) self.onclick = () => runSelfService(r, self);
+  const done = bubble.querySelector('.done');
+  if (done) done.onclick = () => markSolved(done);
   bubble.querySelector('.raise').onclick = () => raiseFromChat(r.suggestedTicket);
 }
 
-async function runSelfService(action, btn) {
+function markSolved(btn) {
+  btn.disabled = true; btn.textContent = 'Marked resolved ✓';
+  addBubble('bot', `<div class="botline">${ICON.check('#1d7a42', 15)} Resolved</div>Glad that helped — I've closed this off, no ticket needed. If it comes back, just ask again or raise a ticket.`);
+}
+
+async function runSelfService(r, btn) {
   btn.disabled = true; btn.textContent = 'Working…';
   try {
-    const r = await api('/api/ai/action', {
+    const res = await api('/api/ai/action', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ action, requester: state.user }),
+      body: JSON.stringify({ action: r.action.id, requester: state.user }),
     });
-    addBubble('bot', `<div class="botline">${ICON.check('#1d7a42', 15)} Done</div>${esc(r.message)}`);
-    btn.textContent = 'Completed ✓';
+    addBubble('bot', `<div class="botline">${ICON.check('#1d7a42', 15)} Done</div>${esc(res.message)}`);
+    btn.textContent = 'Accepted ✓';
+    confirmFix(r); // even after an autofix, let them reject and escalate
   } catch (e) {
     btn.disabled = false; btn.textContent = 'Try again';
     addBubble('bot warn', `Couldn't complete that: ${esc(e.message)}`);
   }
+}
+
+// After any self-service fix, confirm it worked — and still offer to escalate.
+function confirmFix(r) {
+  const bubble = addBubble('bot',
+    `Did that sort it out?<div class="bubble-actions">` +
+    `<button class="done">Yes, all good</button>` +
+    `<button class="raise">No, raise a ticket</button></div>`);
+  bubble.querySelector('.done').onclick = (e) => {
+    e.target.disabled = true; e.target.textContent = 'Thanks ✓';
+    addBubble('bot', `<div class="botline">${ICON.check('#1d7a42', 15)} Nice</div>Great — glad it's working now.`);
+  };
+  bubble.querySelector('.raise').onclick = () => raiseFromChat(r.suggestedTicket);
 }
 
 function raiseFromChat(t) {
