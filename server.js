@@ -1,0 +1,104 @@
+import express from 'express';
+import path from 'path';
+import fs from 'fs';
+import { fileURLToPath } from 'url';
+import {
+  DEPARTMENTS, PRIORITIES, STATUSES,
+  listTickets, getTicket, createTicket, updateStatus, setResolution,
+  resolvedTickets, listNotifications, markNotificationsRead, stats,
+} from './lib/store.js';
+import { categorize, similarTickets, draftResponse, aiStatus } from './lib/ai.js';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const app = express();
+const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+app.use(express.static(path.join(__dirname, 'public')));
+
+// First run convenience: auto-seed if the store is empty.
+if (!fs.existsSync(path.join(__dirname, 'data.json'))) {
+  await import('./lib/seed.js');
+}
+
+const asyncH = (fn) => (req, res) => Promise.resolve(fn(req, res)).catch((e) => {
+  console.error(e);
+  res.status(500).json({ error: e.message });
+});
+
+// --- Metadata -------------------------------------------------------------
+app.get('/api/meta', (req, res) => {
+  res.json({ departments: DEPARTMENTS, priorities: PRIORITIES, statuses: STATUSES, ai: aiStatus() });
+});
+
+// --- Tickets --------------------------------------------------------------
+app.get('/api/tickets', (req, res) => {
+  res.json(listTickets(req.query));
+});
+
+app.get('/api/tickets/:id', (req, res) => {
+  const t = getTicket(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Not found' });
+  res.json(t);
+});
+
+app.post('/api/tickets', (req, res) => {
+  const { title, description, category, priority, requester, aiCategorized } = req.body || {};
+  if (!title || !description) return res.status(400).json({ error: 'title and description are required' });
+  if (!DEPARTMENTS.includes(category)) return res.status(400).json({ error: 'invalid category' });
+  if (!PRIORITIES.includes(priority)) return res.status(400).json({ error: 'invalid priority' });
+  res.status(201).json(createTicket({ title, description, category, priority, requester, aiCategorized }));
+});
+
+app.patch('/api/tickets/:id/status', (req, res) => {
+  const { status, note, agent } = req.body || {};
+  if (!STATUSES.includes(status)) return res.status(400).json({ error: 'invalid status' });
+  const t = updateStatus(req.params.id, status, note, agent);
+  if (!t) return res.status(404).json({ error: 'Not found' });
+  res.json(t);
+});
+
+app.patch('/api/tickets/:id/resolution', (req, res) => {
+  const t = setResolution(req.params.id, (req.body && req.body.resolution) || '');
+  if (!t) return res.status(404).json({ error: 'Not found' });
+  res.json(t);
+});
+
+// --- AI layer -------------------------------------------------------------
+app.post('/api/ai/categorize', asyncH(async (req, res) => {
+  const { title, description } = req.body || {};
+  res.json(await categorize({ title, description }));
+}));
+
+app.post('/api/ai/similar', (req, res) => {
+  const { title, description } = req.body || {};
+  res.json(similarTickets({ title, description }, resolvedTickets()));
+});
+
+app.post('/api/ai/draft/:id', asyncH(async (req, res) => {
+  const t = getTicket(req.params.id);
+  if (!t) return res.status(404).json({ error: 'Not found' });
+  const similar = similarTickets({ title: t.title, description: t.description }, resolvedTickets());
+  res.json({ draft: await draftResponse(t, similar), similar });
+}));
+
+// --- Notifications --------------------------------------------------------
+app.get('/api/notifications', (req, res) => {
+  res.json(listNotifications(req.query.requester));
+});
+
+app.post('/api/notifications/read', (req, res) => {
+  markNotificationsRead((req.body && req.body.requester) || (req.query && req.query.requester));
+  res.json({ ok: true });
+});
+
+// --- Analytics ------------------------------------------------------------
+app.get('/api/stats', (req, res) => {
+  res.json(stats());
+});
+
+app.listen(PORT, () => {
+  const ai = aiStatus();
+  console.log(`Helpdesk running on http://localhost:${PORT}`);
+  console.log(`AI layer: ${ai.enabled ? `Claude (${ai.model})` : 'heuristic fallback (set ANTHROPIC_API_KEY for Claude)'}`);
+});

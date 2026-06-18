@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Helpdesk · Internal Support</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◆</span>
+      <span>Helpdesk</span>
+    </div>
+    <nav class="nav" id="nav">
+      <button data-view="new" class="active">Raise ticket</button>
+      <button data-view="tickets">Tickets</button>
+      <button data-view="analytics">Analytics</button>
+    </nav>
+    <div class="topbar-right">
+      <div class="role-switch" id="roleSwitch" title="Switch perspective">
+        <button data-role="employee" class="active">Employee</button>
+        <button data-role="agent">Agent</button>
+      </div>
+      <select id="userSelect" class="user-select" title="Acting as"></select>
+      <div class="bell" id="bell" title="Notifications">
+        <span class="bell-icon">🔔</span>
+        <span class="badge" id="bellBadge" hidden>0</span>
+        <div class="notif-panel" id="notifPanel" hidden></div>
+      </div>
+    </div>
+  </header>
+
+  <main id="app">
+    <!-- ============ NEW TICKET ============ -->
+    <section class="view" id="view-new">
+      <div class="panel form-panel">
+        <h1>Raise a support ticket</h1>
+        <p class="sub">Describe your issue — our AI will suggest the right department and flag duplicates.</p>
+
+        <label>Title</label>
+        <input id="f-title" type="text" placeholder="e.g. VPN keeps disconnecting" />
+
+        <label>Description</label>
+        <textarea id="f-desc" rows="5" placeholder="Tell us what's happening, what you've tried, and how urgent it is."></textarea>
+
+        <div id="aiHints" class="ai-hints" hidden></div>
+
+        <div class="row">
+          <div class="col">
+            <label>Department
+              <span class="ai-tag" id="catTag" hidden>AI suggested</span>
+            </label>
+            <select id="f-cat"></select>
+          </div>
+          <div class="col">
+            <label>Urgency</label>
+            <div class="priority-picker" id="priorityPicker"></div>
+          </div>
+        </div>
+
+        <div id="similarBox" class="similar-box" hidden>
+          <h3>⚠ Similar resolved tickets — is yours a duplicate?</h3>
+          <div id="similarList"></div>
+        </div>
+
+        <div class="actions">
+          <button id="btnAnalyze" class="ghost">✨ Re-run AI suggestions</button>
+          <button id="btnSubmit" class="primary">Submit ticket</button>
+        </div>
+        <div id="newMsg" class="inline-msg" hidden></div>
+      </div>
+    </section>
+
+    <!-- ============ TICKETS ============ -->
+    <section class="view" id="view-tickets" hidden>
+      <div class="list-header">
+        <h1 id="ticketsTitle">Tickets</h1>
+        <div class="filters" id="filters">
+          <select id="flt-cat"><option value="">All departments</option></select>
+          <select id="flt-pri">
+            <option value="">All priorities</option>
+            <option value="urgent">🔴 Urgent</option>
+            <option value="mild">🟡 Mild</option>
+            <option value="normal">🟢 Normal</option>
+          </select>
+          <select id="flt-status"><option value="">All statuses</option></select>
+          <input id="flt-q" type="search" placeholder="Search…" />
+        </div>
+      </div>
+      <div class="ticket-grid" id="ticketGrid"></div>
+    </section>
+
+    <!-- ============ ANALYTICS ============ -->
+    <section class="view" id="view-analytics" hidden>
+      <h1>Analytics</h1>
+      <div class="kpi-row" id="kpiRow"></div>
+      <div class="charts">
+        <div class="panel chart-panel">
+          <h3>Tickets per month</h3>
+          <div id="chart-month"></div>
+        </div>
+        <div class="panel chart-panel">
+          <h3>By department</h3>
+          <div id="chart-dept"></div>
+        </div>
+        <div class="panel chart-panel">
+          <h3>Open vs In Progress vs Resolved</h3>
+          <div id="chart-status"></div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <!-- ============ TICKET DETAIL DRAWER ============ -->
+  <div class="drawer-overlay" id="drawerOverlay" hidden></div>
+  <aside class="drawer" id="drawer" hidden></aside>
+
+  <script src="app.js"></script>
+</body>
+</html>
