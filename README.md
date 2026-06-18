@@ -21,12 +21,21 @@ lifecycle, with an integrated AI layer and built-in analytics.
 - **Priority-aware filtering** by department, urgency, status, and free text.
 
 ### AI layer
-1. **Auto-categorisation** — the description is analysed and the right
-   department + urgency are suggested, so an unsure employee doesn't have to pick.
-2. **Similar-ticket surfacing** — before submission, previously resolved tickets
-   that look like duplicates are shown, with a match score, to cut duplicates.
-3. **Agent draft reply** — a suggested first response is drafted for the agent
-   from the ticket and similar resolved cases.
+1. **Conversational assistant ("Ask AI")** — employees describe a problem in
+   plain language ("My monitor isn't turning on", "Where do I submit my expense
+   report?"). The assistant searches the internal knowledge base + past closed
+   tickets and replies with a humanized, step-by-step answer and a doc link.
+   Simple low-priority cases are resolved with **one-click self-service**
+   (password reset, software provisioning) — no human needed. Anything harder
+   becomes a **pre-filled ticket**. Gibberish (e.g. `bhdbhbciebc`) is rejected,
+   and only gibberish.
+2. **Auto-categorisation + live assist** — while raising a ticket, the right
+   department + urgency are suggested, the wording is rephrased/polished
+   (one-click apply), tags are extracted, completeness is scored, and similar
+   resolved tickets are surfaced with a match %.
+3. **Agent recommender** — for the assigned agent, the system searches internal
+   docs and past closed tickets to recommend a summary, step-by-step resolution,
+   and a drafted first reply.
 
 The AI uses **Claude (`claude-opus-4-8`)** when `ANTHROPIC_API_KEY` is set, and
 falls back to fast, deterministic heuristics (keyword classifier + TF-cosine
@@ -93,9 +102,11 @@ public/            Vanilla-JS SPA (index.html, styles.css, app.js)
 | `POST` | `/api/tickets` | Create a ticket |
 | `PATCH` | `/api/tickets/:id/status` | Advance lifecycle status |
 | `PATCH` | `/api/tickets/:id/resolution` | Save resolution notes |
-| `POST` | `/api/ai/categorize` | Suggest department + urgency |
+| `POST` | `/api/ai/chat` | Conversational assistant (answer / self-service / pre-fill); rejects gibberish |
+| `POST` | `/api/ai/action` | Run a self-service action (password reset, software provisioning) |
+| `POST` | `/api/ai/assist` | Live composer assist (routing, rephrase, tags, completeness, similar) |
 | `POST` | `/api/ai/similar` | Surface similar resolved tickets |
-| `POST` | `/api/ai/draft/:id` | Draft an agent first response |
+| `POST` | `/api/ai/draft/:id` | Agent summary + resolution steps + drafted reply |
 | `GET` | `/api/notifications` | Employee notifications |
 | `GET` | `/api/stats` | Analytics aggregates |
 

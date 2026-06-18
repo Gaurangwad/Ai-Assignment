@@ -6,7 +6,7 @@ import {
   listTickets, getTicket, createTicket, updateStatus, setResolution,
   resolvedTickets, listNotifications, markNotificationsRead, stats,
 } from './lib/store.js';
-import { assist, categorize, similarTickets, agentInsights, aiStatus } from './lib/ai.js';
+import { assist, categorize, similarTickets, agentInsights, resolveQuery, runAction, aiStatus } from './lib/ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -79,6 +79,19 @@ app.post('/api/ai/categorize', asyncH(async (req, res) => {
 app.post('/api/ai/similar', (req, res) => {
   const { title, description } = req.body || {};
   res.json(similarTickets({ title, description }, resolvedTickets()));
+});
+
+// Conversational assistant: instant answers from internal docs + past tickets,
+// self-service for simple cases, or a pre-filled ticket. Rejects gibberish.
+app.post('/api/ai/chat', asyncH(async (req, res) => {
+  const { message } = req.body || {};
+  res.json(await resolveQuery({ message }, resolvedTickets()));
+}));
+
+// Run a simulated self-service action (password reset, software provisioning).
+app.post('/api/ai/action', (req, res) => {
+  const { action, requester } = req.body || {};
+  res.json(runAction(action, { requester }));
 });
 
 // Agent insights: summary + resolution steps + drafted first response.

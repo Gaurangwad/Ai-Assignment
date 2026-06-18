@@ -17,7 +17,8 @@
       <span>Helpdesk</span>
     </div>
     <nav class="nav" id="nav">
-      <button data-view="new" class="active">Raise ticket</button>
+      <button data-view="ask" class="active">Ask AI</button>
+      <button data-view="new">Raise ticket</button>
       <button data-view="tickets">Tickets</button>
       <button data-view="analytics">Analytics</button>
     </nav>
@@ -39,8 +40,24 @@
   </header>
 
   <main id="app">
+    <!-- ============ ASK AI (conversational) ============ -->
+    <section class="view" id="view-ask">
+      <div class="chat-wrap">
+        <div class="chat-head">
+          <h1>Ask the help assistant</h1>
+          <p class="sub">Describe your problem in plain words — I'll try to solve it on the spot, or route it to the right team.</p>
+        </div>
+        <div class="chat-log" id="chatLog"></div>
+        <div class="chat-suggest" id="chatSuggest"></div>
+        <div class="chat-input">
+          <input id="chatBox" type="text" placeholder="e.g. My monitor isn't turning on" autocomplete="off" />
+          <button id="chatSend" class="primary">Send</button>
+        </div>
+      </div>
+    </section>
+
     <!-- ============ NEW TICKET ============ -->
-    <section class="view" id="view-new">
+    <section class="view" id="view-new" hidden>
       <div class="composer-grid">
         <div class="panel form-panel">
           <h1>Raise a support ticket</h1>

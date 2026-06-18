@@ -57,9 +57,110 @@ async function boot() {
   wireNewTicket();
   wireFilters();
   wireBell();
+  wireChat();
   refreshNotifications();
   setInterval(refreshNotifications, 15000);
   showAIStatus();
+}
+
+// ---------------------------------------------------------------------------
+// Ask AI — conversational assistant
+// ---------------------------------------------------------------------------
+const CHAT_EXAMPLES = [
+  "My monitor isn't turning on",
+  'I forgot my password',
+  'Where do I submit my expense report?',
+  'VPN keeps dropping',
+];
+
+function wireChat() {
+  const box = $('#chatBox'), send = $('#chatSend');
+  send.onclick = () => submitChat();
+  box.addEventListener('keydown', (e) => { if (e.key === 'Enter') submitChat(); });
+  $('#chatSuggest').innerHTML = CHAT_EXAMPLES.map((t) => `<button>${esc(t)}</button>`).join('');
+  $$('#chatSuggest button').forEach((b) => (b.onclick = () => { $('#chatBox').value = b.textContent; submitChat(); }));
+  // Friendly greeting.
+  addBubble('bot', `<div class="botline">${ICON.ai('#2f6df6', 15)} Assistant</div>Hi ${esc((state.user || '').split(' ')[0] || 'there')} — tell me what's going on and I'll try to fix it right away or get it to the right team.`);
+}
+
+function addBubble(role, html) {
+  const log = $('#chatLog');
+  const div = document.createElement('div');
+  div.className = `bubble ${role}`;
+  div.innerHTML = html;
+  log.appendChild(div);
+  div.scrollIntoView({ behavior: 'smooth', block: 'end' });
+  return div;
+}
+
+async function submitChat(text) {
+  const box = $('#chatBox');
+  const message = (text || box.value).trim();
+  if (!message) return;
+  box.value = '';
+  addBubble('user', esc(message));
+  const thinking = addBubble('bot', `<div class="botline">${ICON.ai('#2f6df6', 15)} Assistant</div><span class="spin">${ICON.ai('#6b7686', 14)}</span> Searching our help docs…`);
+  try {
+    const r = await api('/api/ai/chat', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message }),
+    });
+    thinking.remove();
+    renderBotAnswer(r);
+  } catch (e) {
+    thinking.remove();
+    addBubble('bot warn', `Sorry, I hit a problem: ${esc(e.message)}`);
+  }
+}
+
+function renderBotAnswer(r) {
+  if (r.type === 'gibberish') {
+    addBubble('bot warn', `<div class="botline">${ICON.ai('#a9700a', 15)} Assistant</div>${esc(r.reply)}`);
+    return;
+  }
+  let html = `<div class="botline">${ICON.ai('#2f6df6', 15)} Assistant${r.resolved ? `<span class="resolved-tag">No ticket needed</span>` : ''}</div>${esc(r.reply)}`;
+  if (r.article && r.article.steps && r.article.steps.length) {
+    html += `<ol class="steps">${r.article.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>`;
+    if (r.article.link) {
+      html += `<a class="kb-link" href="${esc(r.article.link)}" target="_blank" rel="noopener">${ICON.ai('#2f6df6', 13)} Open the help doc</a>`;
+    }
+  }
+  if (r.similar && r.similar.length) {
+    html += `<div class="past">Past resolved cases: ${r.similar.map((s) => `<b>${esc(s.title)}</b> (${s.match}%)`).join(', ')}.</div>`;
+  }
+  html += `<div class="bubble-actions">`;
+  if (r.action) html += `<button class="self" data-action="${esc(r.action.id)}">${esc(r.action.label)}</button>`;
+  html += `<button class="raise">Raise a ticket instead</button></div>`;
+
+  const bubble = addBubble('bot', html);
+  const self = bubble.querySelector('.self');
+  if (self) self.onclick = () => runSelfService(self.dataset.action, self);
+  bubble.querySelector('.raise').onclick = () => raiseFromChat(r.suggestedTicket);
+}
+
+async function runSelfService(action, btn) {
+  btn.disabled = true; btn.textContent = 'Working…';
+  try {
+    const r = await api('/api/ai/action', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action, requester: state.user }),
+    });
+    addBubble('bot', `<div class="botline">${ICON.check('#1d7a42', 15)} Done</div>${esc(r.message)}`);
+    btn.textContent = 'Completed ✓';
+  } catch (e) {
+    btn.disabled = false; btn.textContent = 'Try again';
+    addBubble('bot warn', `Couldn't complete that: ${esc(e.message)}`);
+  }
+}
+
+function raiseFromChat(t) {
+  switchView('new');
+  if (!t) return;
+  $('#f-title').value = t.title || '';
+  $('#f-desc').value = t.description || '';
+  if (t.category) { $('#f-cat').value = t.category; state.category = t.category; $('#catTag').hidden = false; }
+  if (t.priority) setPriority(t.priority);
+  runAssist(true);
 }
 
 function showAIStatus() {
@@ -104,7 +205,7 @@ function setPriority(p) {
 // ---------------------------------------------------------------------------
 // Navigation / role
 // ---------------------------------------------------------------------------
-let currentView = 'new';
+let currentView = 'ask';
 function wireNav() {
   $$('#nav button').forEach((b) => (b.onclick = () => switchView(b.dataset.view)));
 }
