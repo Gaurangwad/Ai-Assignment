@@ -6,7 +6,7 @@ import {
   listTickets, getTicket, createTicket, updateStatus, setResolution,
   resolvedTickets, listNotifications, markNotificationsRead, stats,
 } from './lib/store.js';
-import { categorize, similarTickets, draftResponse, aiStatus } from './lib/ai.js';
+import { assist, categorize, similarTickets, agentInsights, aiStatus } from './lib/ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -60,6 +60,17 @@ app.patch('/api/tickets/:id/resolution', (req, res) => {
 });
 
 // --- AI layer -------------------------------------------------------------
+// Rich, in-flow assistant: routing + confidence, rephrased title/description,
+// tags, completeness, self-help, and similar tickets — in one call.
+app.post('/api/ai/assist', asyncH(async (req, res) => {
+  const { title, description } = req.body || {};
+  const [a, similar] = await Promise.all([
+    assist({ title, description }),
+    Promise.resolve(similarTickets({ title, description }, resolvedTickets())),
+  ]);
+  res.json({ ...a, similar });
+}));
+
 app.post('/api/ai/categorize', asyncH(async (req, res) => {
   const { title, description } = req.body || {};
   res.json(await categorize({ title, description }));
@@ -70,11 +81,13 @@ app.post('/api/ai/similar', (req, res) => {
   res.json(similarTickets({ title, description }, resolvedTickets()));
 });
 
+// Agent insights: summary + resolution steps + drafted first response.
 app.post('/api/ai/draft/:id', asyncH(async (req, res) => {
   const t = getTicket(req.params.id);
   if (!t) return res.status(404).json({ error: 'Not found' });
   const similar = similarTickets({ title: t.title, description: t.description }, resolvedTickets());
-  res.json({ draft: await draftResponse(t, similar), similar });
+  const insights = await agentInsights(t, similar);
+  res.json({ ...insights, similar });
 }));
 
 // --- Notifications --------------------------------------------------------

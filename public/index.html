@@ -41,50 +41,47 @@
   <main id="app">
     <!-- ============ NEW TICKET ============ -->
     <section class="view" id="view-new">
-      <div class="panel form-panel">
-        <h1>Raise a support ticket</h1>
-        <p class="sub">Describe your issue — our AI will suggest the right department and flag duplicates.</p>
+      <div class="composer-grid">
+        <div class="panel form-panel">
+          <h1>Raise a support ticket</h1>
+          <p class="sub">Describe your issue in your own words — the assistant routes it, sharpens the wording, and flags duplicates as you type.</p>
 
-        <label>Title</label>
-        <input id="f-title" type="text" placeholder="e.g. VPN keeps disconnecting" />
+          <label>Title</label>
+          <input id="f-title" type="text" placeholder="e.g. VPN keeps disconnecting" autocomplete="off" />
 
-        <label>Description</label>
-        <textarea id="f-desc" rows="5" placeholder="Tell us what's happening, what you've tried, and how urgent it is."></textarea>
+          <label>Description</label>
+          <textarea id="f-desc" rows="6" placeholder="Tell us what's happening, what you've tried, and how urgent it is."></textarea>
 
-        <div id="aiHints" class="ai-hints" hidden></div>
-
-        <div class="row">
-          <div class="col">
-            <label>Department
-              <span class="ai-tag" id="catTag" hidden>AI suggested</span>
-            </label>
-            <select id="f-cat"></select>
+          <div class="row">
+            <div class="col">
+              <label>Department <span class="ai-tag" id="catTag" hidden>AI</span></label>
+              <select id="f-cat"></select>
+            </div>
+            <div class="col">
+              <label>Urgency</label>
+              <div class="priority-picker" id="priorityPicker"></div>
+            </div>
           </div>
-          <div class="col">
-            <label>Urgency</label>
-            <div class="priority-picker" id="priorityPicker"></div>
+
+          <div class="actions">
+            <button id="btnSubmit" class="primary">Submit ticket</button>
           </div>
+          <div id="newMsg" class="inline-msg" hidden></div>
         </div>
 
-        <div id="similarBox" class="similar-box" hidden>
-          <h3>
-            <svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="#d9a800" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M10.3 3.3 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.3a2 2 0 0 0-3.4 0z"/>
-              <line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>
-            </svg>
-            Similar resolved tickets — is yours a duplicate?
-          </h3>
-          <div id="similarList"></div>
-        </div>
-
-        <div class="actions">
-          <button id="btnAnalyze" class="ghost">
-            <svg class="ic" viewBox="0 0 24 24" width="15" height="15" fill="#2f6df6" aria-hidden="true"><path d="M12 2l1.7 5L19 8.7l-5.3 1.8L12 16l-1.7-5.5L5 8.7 10.3 7z"/></svg>
-            Re-run AI suggestions
-          </button>
-          <button id="btnSubmit" class="primary">Submit ticket</button>
-        </div>
-        <div id="newMsg" class="inline-msg" hidden></div>
+        <aside class="assist" id="assistPanel">
+          <div class="assist-head">
+            <span class="assist-title">
+              <svg class="ic" viewBox="0 0 24 24" width="16" height="16" fill="#2f6df6" aria-hidden="true"><path d="M12 2l1.7 5L19 8.7l-5.3 1.8L12 16l-1.7-5.5L5 8.7 10.3 7z"/></svg>
+              AI Assist
+            </span>
+            <button id="btnAnalyze" class="assist-refresh" title="Re-run">Refresh</button>
+          </div>
+          <div class="assist-mode" id="assistMode" hidden></div>
+          <div id="assistBody" class="assist-body">
+            <div class="assist-empty">Start typing your issue and I'll route it to the right team, improve the wording, and surface similar resolved tickets — all live.</div>
+          </div>
+        </aside>
       </div>
     </section>
 
@@ -93,6 +90,10 @@
       <div class="list-header">
         <h1 id="ticketsTitle">Tickets</h1>
         <div class="filters" id="filters">
+          <div class="view-toggle" id="viewToggle">
+            <button data-mode="list" class="active">List</button>
+            <button data-mode="board">Board</button>
+          </div>
           <select id="flt-cat"><option value="">All departments</option></select>
           <select id="flt-pri">
             <option value="">All priorities</option>
@@ -105,6 +106,7 @@
         </div>
       </div>
       <div class="ticket-grid" id="ticketGrid"></div>
+      <div class="board" id="board" hidden></div>
     </section>
 
     <!-- ============ ANALYTICS ============ -->

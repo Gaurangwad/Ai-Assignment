@@ -186,6 +186,13 @@ button { font: inherit; }
 .status-flow button.cur { background: var(--ink); color: #fff; border-color: var(--ink); }
 .status-flow button:disabled { opacity: .4; cursor: not-allowed; }
 .draft-box { width: 100%; min-height: 130px; margin-top: 8px; }
+.insights { display: flex; flex-direction: column; gap: 10px; margin: 10px 0; }
+.ins-card { border: 1px solid var(--line); border-radius: 9px; padding: 11px; font-size: 13px; }
+.ins-card .ahead { display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 7px; }
+.ins-card .steps { margin: 0; padding-left: 18px; }
+.ins-card .steps li { margin: 4px 0; }
+.ins-card .meta { color: var(--muted); font-size: 12px; display: flex; gap: 8px; align-items: center; }
+.ins-card .pct { color: #a9700a; font-weight: 700; }
 .agent-only-note { color: var(--muted); font-size: 12px; font-style: italic; }
 
 /* ---------- Analytics ---------- */
@@ -199,6 +206,70 @@ button { font: inherit; }
 .legend { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; font-size: 12px; color: var(--muted); }
 .legend span { display: inline-flex; align-items: center; gap: 6px; }
 .legend i { width: 10px; height: 10px; border-radius: 3px; display: inline-block; }
+
+/* ---------- Composer + AI Assist (Jira-like split) ---------- */
+.composer-grid { display: grid; grid-template-columns: 1fr 360px; gap: 18px; align-items: start; }
+.composer-grid .form-panel { max-width: none; margin: 0; }
+.assist {
+  position: sticky; top: 80px; background: var(--surface); border: 1px solid var(--line);
+  border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden;
+}
+.assist-head {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 13px 16px; border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, var(--accent-soft), #f7faff);
+}
+.assist-title { display: inline-flex; align-items: center; gap: 7px; font-weight: 700; }
+.assist-refresh { border: 1px solid #cfe0ff; background: #fff; color: var(--accent); border-radius: 7px; padding: 5px 10px; font-size: 12px; font-weight: 600; cursor: pointer; }
+.assist-refresh:hover { background: var(--accent-soft); }
+.assist-mode { font-size: 11px; color: var(--muted); padding: 8px 16px 0; }
+.assist-mode b { color: var(--accent); }
+.assist-body { padding: 14px 16px 18px; display: flex; flex-direction: column; gap: 14px; max-height: 72vh; overflow-y: auto; }
+.assist-empty { color: var(--muted); font-size: 13px; line-height: 1.6; }
+
+.acard { border: 1px solid var(--line); border-radius: 10px; padding: 12px; }
+.acard .ahead { display: flex; align-items: center; gap: 7px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); margin-bottom: 9px; }
+.acard .big { font-size: 15px; font-weight: 600; color: var(--ink); }
+.acard .reason { color: var(--muted); font-size: 12px; margin-top: 4px; }
+
+.meter { height: 7px; border-radius: 5px; background: var(--bg); overflow: hidden; margin-top: 8px; }
+.meter > i { display: block; height: 100%; border-radius: 5px; background: var(--accent); }
+.meter.warn > i { background: var(--yellow); }
+.meter.good > i { background: var(--green); }
+
+.rephrase { background: var(--bg); border-radius: 8px; padding: 9px 10px; font-size: 13px; white-space: pre-wrap; margin-top: 8px; max-height: 150px; overflow-y: auto; }
+.apply-btn { border: 0; background: var(--accent); color: #fff; border-radius: 7px; padding: 6px 11px; font-size: 12px; font-weight: 600; cursor: pointer; margin-top: 8px; }
+.apply-btn.sec { background: var(--surface); color: var(--accent); border: 1px solid #cfe0ff; }
+.apply-btn:hover { filter: brightness(.96); }
+.apply-row { display: flex; gap: 8px; }
+
+.tags { display: flex; flex-wrap: wrap; gap: 6px; }
+.tag { background: var(--accent-soft); color: var(--accent); font-size: 11px; font-weight: 600; padding: 3px 9px; border-radius: 20px; }
+.miss-list { margin: 6px 0 0; padding-left: 18px; color: var(--muted); font-size: 12px; }
+.miss-list li { margin: 2px 0; }
+.selfhelp { background: var(--green-soft); border: 1px solid #bfe8cd; border-radius: 8px; padding: 10px; font-size: 12.5px; color: #1d7a42; }
+.acard.dup { border-color: #f0c36d; background: #fffaf0; }
+.acard.dup .ahead { color: #a9700a; }
+
+/* ---------- View toggle + Kanban board ---------- */
+.view-toggle { display: flex; background: var(--bg); border-radius: 8px; padding: 3px; }
+.view-toggle button { border: 0; background: transparent; padding: 6px 12px; border-radius: 6px; cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 500; }
+.view-toggle button.active { background: var(--surface); color: var(--ink); box-shadow: var(--shadow); }
+
+.board { display: grid; grid-template-columns: repeat(4, minmax(220px, 1fr)); gap: 14px; align-items: start; }
+.bcol { background: #f0f2f6; border-radius: var(--radius); padding: 10px; min-height: 120px; }
+.bcol-head { display: flex; align-items: center; justify-content: space-between; font-weight: 600; font-size: 13px; padding: 4px 6px 10px; }
+.bcol-head .cnt { background: var(--surface); color: var(--muted); border-radius: 20px; font-size: 11px; padding: 1px 8px; font-weight: 700; }
+.bcard { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--line); border-radius: 9px; padding: 11px; margin-bottom: 9px; cursor: pointer; box-shadow: var(--shadow); }
+.bcard:hover { transform: translateY(-1px); }
+.bcard.p-urgent { border-left-color: var(--red); }
+.bcard.p-mild { border-left-color: var(--yellow); }
+.bcard.p-normal { border-left-color: var(--green); }
+.bcard .id { color: var(--muted); font-size: 10px; font-weight: 600; }
+.bcard h5 { margin: 3px 0 8px; font-size: 13px; font-weight: 600; }
+.bcard .bfoot { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.bempty { color: var(--muted); font-size: 12px; text-align: center; padding: 16px 0; }
+@media (max-width: 980px) { .composer-grid { grid-template-columns: 1fr; } .assist { position: static; } .board { grid-template-columns: 1fr 1fr; } }
 
 .view { animation: fade .2s ease; }
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }

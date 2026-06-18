@@ -9,6 +9,7 @@ const state = {
   user: 'Priya Sharma',
   priority: 'normal',
   category: 'IT',
+  ticketView: 'list',
 };
 const USERS = ['Priya Sharma', 'Daniel Kim', 'Aisha Khan', 'Tom Reyes', 'Lena Fischer', 'Marco Bianchi'];
 
@@ -62,11 +63,9 @@ async function boot() {
 }
 
 function showAIStatus() {
-  const hint = $('#aiHints');
-  if (!state.meta.ai.enabled) {
-    // Subtle note that heuristics are in use; not an error.
-    document.title = 'Helpdesk · Internal Support';
-  }
+  document.title = state.meta.ai.enabled
+    ? 'Helpdesk · AI-assisted support'
+    : 'Helpdesk · Internal Support';
 }
 
 function hydrateSelects() {
@@ -131,65 +130,141 @@ function wireRoleSwitch() {
 // ---------------------------------------------------------------------------
 // New ticket + AI assist
 // ---------------------------------------------------------------------------
+let lastAssist = null;       // most recent assist payload
+let lastApplied = null;      // {field, prev} for one-click undo
+
 function wireNewTicket() {
   const desc = $('#f-desc'), title = $('#f-title');
-  const trigger = debounce(runAI, 700);
+  const trigger = debounce(runAssist, 650);
   desc.addEventListener('input', trigger);
   title.addEventListener('input', trigger);
-  $('#btnAnalyze').onclick = runAI;
+  $('#btnAnalyze').onclick = () => runAssist(true);
   $('#btnSubmit').onclick = submitTicket;
 }
 
-async function runAI() {
+async function runAssist(force = false) {
   const title = $('#f-title').value.trim();
   const description = $('#f-desc').value.trim();
-  if (description.length < 12) return;
+  const body = $('#assistBody');
+  if (description.length < 10 && !force) return;
+  if (description.length < 6) { body.innerHTML = `<div class="assist-empty">Add a few more words and I'll get to work.</div>`; return; }
 
-  const hints = $('#aiHints');
-  hints.hidden = false;
-  hints.innerHTML = `<span class="spin">${ICON.ai()}</span> Analysing with ${state.meta.ai.enabled ? 'Claude' : 'AI'}…`;
-
+  body.innerHTML = `<div class="assist-empty"><span class="spin">${ICON.ai()}</span> Analysing with ${state.meta.ai.enabled ? 'Claude' : 'AI'}…</div>`;
   try {
-    const [cat, similar] = await Promise.all([
-      api('/api/ai/categorize', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, description }) }),
-      api('/api/ai/similar', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ title, description }) }),
-    ]);
-
-    // Apply suggested category + priority.
-    $('#f-cat').value = cat.category;
-    state.category = cat.category;
+    const a = await api('/api/ai/assist', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, description }),
+    });
+    lastAssist = a;
+    // Auto-apply routing (the employee can still override the dropdown).
+    $('#f-cat').value = a.category;
+    state.category = a.category;
     $('#catTag').hidden = false;
-    if (cat.priority) setPriority(cat.priority);
-
-    const conf = Math.round((cat.confidence || 0) * 100);
-    const badge = cat.source === 'claude' ? 'Claude' : 'AI';
-    hints.innerHTML =
-      `<strong>${ICON.ai()} Suggested: ${esc(cat.category)} · ${cat.priority ? priLabel(cat.priority) : ''}</strong>` +
-      ` <span class="ai-tag">${badge} · ${conf}% confident</span>` +
-      `<div class="reason">${esc(cat.reason || '')}</div>`;
-
-    renderSimilar(similar);
+    if (a.priority) setPriority(a.priority);
+    renderAssist(a);
   } catch (e) {
-    hints.innerHTML = `<span style="color:var(--red)">AI unavailable: ${esc(e.message)}</span>`;
+    body.innerHTML = `<div class="assist-empty" style="color:var(--red)">AI unavailable: ${esc(e.message)}</div>`;
   }
 }
 
-function renderSimilar(list) {
-  const box = $('#similarBox'), out = $('#similarList');
-  if (!list.length) { box.hidden = true; return; }
-  box.hidden = false;
-  out.innerHTML = list
-    .map(
-      (s) => `<div class="sim-item">
-        <div>
-          <div><strong>${esc(s.title)}</strong></div>
-          <div class="meta">${esc(s.id)} · ${esc(s.category)} · ${esc(s.status)}${s.resolution ? ' — ' + esc(s.resolution) : ''}</div>
+function renderAssist(a) {
+  const conf = Math.round((a.confidence || 0) * 100);
+  const score = a.score ?? 0;
+  const meterClass = score >= 75 ? 'good' : score >= 45 ? 'warn' : '';
+  const cards = [];
+
+  // Routing
+  const confClass = conf >= 75 ? 'good' : conf >= 50 ? 'warn' : '';
+  cards.push(`<div class="acard">
+    <div class="ahead">${ICON.ai('#6b7686', 13)} Suggested routing</div>
+    <div class="big">${esc(a.category)} · ${priLabel(a.priority)}</div>
+    <div class="meter ${confClass}" style="margin-top:8px"><i style="width:${conf}%"></i></div>
+    <div class="reason">${conf}% confident — ${esc(a.reason || '')}</div>
+  </div>`);
+
+  // Rephrase / improve writing
+  if (a.rephrasedTitle || a.rephrasedDescription) {
+    cards.push(`<div class="acard">
+      <div class="ahead">${ICON.ai('#6b7686', 13)} Improve the wording</div>
+      ${a.rephrasedTitle ? `<div style="font-size:12px;color:var(--muted)">Suggested title</div><div class="rephrase" id="rpTitle">${esc(a.rephrasedTitle)}</div>` : ''}
+      ${a.rephrasedDescription ? `<div style="font-size:12px;color:var(--muted);margin-top:8px">Suggested description</div><div class="rephrase" id="rpDesc">${esc(a.rephrasedDescription)}</div>` : ''}
+      <div class="apply-row">
+        <button class="apply-btn" id="applyAll">Apply both</button>
+        ${a.rephrasedTitle ? `<button class="apply-btn sec" id="applyTitle">Title</button>` : ''}
+        ${a.rephrasedDescription ? `<button class="apply-btn sec" id="applyDesc">Description</button>` : ''}
+      </div>
+      <button class="apply-btn sec" id="undoApply" style="margin-top:8px" hidden>Undo</button>
+    </div>`);
+  }
+
+  // Tags
+  if (a.tags && a.tags.length) {
+    cards.push(`<div class="acard">
+      <div class="ahead">Tags</div>
+      <div class="tags">${a.tags.map((t) => `<span class="tag">${esc(t)}</span>`).join('')}</div>
+    </div>`);
+  }
+
+  // Completeness
+  cards.push(`<div class="acard">
+    <div class="ahead">Ticket completeness</div>
+    <div class="big" style="font-size:14px">${score}/100</div>
+    <div class="meter ${meterClass}"><i style="width:${score}%"></i></div>
+    ${a.missing && a.missing.length
+      ? `<div class="reason">Add for a faster fix:</div><ul class="miss-list">${a.missing.map((m) => `<li>${esc(m)}</li>`).join('')}</ul>`
+      : `<div class="reason">Looks complete — good to submit.</div>`}
+  </div>`);
+
+  // Self-help deflection
+  if (a.selfHelp) {
+    cards.push(`<div class="acard">
+      <div class="ahead">${ICON.check('#1d7a42', 13)} Before you submit</div>
+      <div class="selfhelp">${esc(a.selfHelp)}</div>
+    </div>`);
+  }
+
+  // Similar tickets (keep match %)
+  if (a.similar && a.similar.length) {
+    cards.push(`<div class="acard dup">
+      <div class="ahead">Possible duplicates</div>
+      ${a.similar.map((s) => `<div class="sim-item">
+        <div><strong>${esc(s.title)}</strong>
+          <div class="meta">${esc(s.id)} · ${esc(s.status)}${s.resolution ? ' — ' + esc(s.resolution) : ''}</div>
         </div>
-        <div class="pct">${s.match}% match</div>
-      </div>`
-    )
-    .join('');
+        <div class="pct">${s.match}%</div>
+      </div>`).join('')}
+    </div>`);
+  }
+
+  $('#assistBody').innerHTML = cards.join('');
+  const mode = $('#assistMode');
+  mode.hidden = false;
+  mode.innerHTML = a.source === 'claude' ? `Powered by <b>Claude</b>` : `Smart heuristics — set an API key for <b>Claude</b>`;
+
+  // Wire apply / undo
+  const applyTitle = () => { stash('#f-title'); $('#f-title').value = a.rephrasedTitle; };
+  const applyDesc = () => { stash('#f-desc'); $('#f-desc').value = a.rephrasedDescription; };
+  if ($('#applyTitle')) $('#applyTitle').onclick = () => { applyTitle(); showUndo(); };
+  if ($('#applyDesc')) $('#applyDesc').onclick = () => { applyDesc(); showUndo(); };
+  if ($('#applyAll')) $('#applyAll').onclick = () => {
+    lastApplied = { title: $('#f-title').value, desc: $('#f-desc').value };
+    if (a.rephrasedTitle) $('#f-title').value = a.rephrasedTitle;
+    if (a.rephrasedDescription) $('#f-desc').value = a.rephrasedDescription;
+    showUndo();
+  };
+  if ($('#undoApply')) $('#undoApply').onclick = () => {
+    if (!lastApplied) return;
+    if (lastApplied.title !== undefined) $('#f-title').value = lastApplied.title;
+    if (lastApplied.desc !== undefined) $('#f-desc').value = lastApplied.desc;
+    lastApplied = null; $('#undoApply').hidden = true;
+  };
 }
+function stash(sel) {
+  lastApplied = lastApplied || {};
+  if (sel === '#f-title') lastApplied.title = $('#f-title').value;
+  if (sel === '#f-desc') lastApplied.desc = $('#f-desc').value;
+}
+function showUndo() { if ($('#undoApply')) $('#undoApply').hidden = false; }
 
 async function submitTicket() {
   const title = $('#f-title').value.trim();
@@ -214,7 +289,10 @@ async function submitTicket() {
     msg.hidden = false; msg.className = 'inline-msg ok';
     msg.innerHTML = `${ICON.check()} Ticket ${esc(t.id)} created and routed to the ${esc(t.category)} queue. You'll be notified as it progresses.`;
     $('#f-title').value = ''; $('#f-desc').value = '';
-    $('#aiHints').hidden = true; $('#similarBox').hidden = true; $('#catTag').hidden = true;
+    $('#catTag').hidden = true;
+    $('#assistBody').innerHTML = `<div class="assist-empty">Ticket submitted. Start a new one and I'll assist again.</div>`;
+    $('#assistMode').hidden = true;
+    lastAssist = null; lastApplied = null;
     setPriority('normal');
     refreshNotifications();
   } catch (e) {
@@ -228,6 +306,13 @@ async function submitTicket() {
 function wireFilters() {
   ['#flt-cat', '#flt-pri', '#flt-status'].forEach((s) => ($(s).onchange = loadTickets));
   $('#flt-q').oninput = debounce(loadTickets, 250);
+  $$('#viewToggle button').forEach((b) => {
+    b.onclick = () => {
+      state.ticketView = b.dataset.mode;
+      $$('#viewToggle button').forEach((x) => x.classList.toggle('active', x === b));
+      loadTickets();
+    };
+  });
 }
 
 async function loadTickets() {
@@ -237,15 +322,45 @@ async function loadTickets() {
   if (pri) params.set('priority', pri);
   if (st) params.set('status', st);
   if (q) params.set('q', q);
-  // Employees only see their own tickets.
   if (state.role === 'employee') params.set('requester', state.user);
   $('#ticketsTitle').textContent = state.role === 'employee' ? `My tickets` : 'Department queues';
 
   const rows = await api('/api/tickets?' + params.toString());
+  const board = state.ticketView === 'board';
+  $('#ticketGrid').hidden = board;
+  $('#board').hidden = !board;
+  board ? renderBoard(rows) : renderList(rows);
+}
+
+function renderList(rows) {
   const grid = $('#ticketGrid');
   if (!rows.length) { grid.innerHTML = `<div class="empty">No tickets match these filters.</div>`; return; }
   grid.innerHTML = rows.map(ticketCard).join('');
   $$('.tcard', grid).forEach((el) => (el.onclick = () => openDrawer(el.dataset.id)));
+}
+
+function renderBoard(rows) {
+  const board = $('#board');
+  const cols = state.meta.statuses;
+  board.innerHTML = cols.map((status) => {
+    const items = rows.filter((t) => t.status === status);
+    const cards = items.length
+      ? items.map((t) => `<div class="bcard p-${t.priority}" data-id="${t.id}">
+          <div class="id">${t.id}</div>
+          <h5>${esc(t.title)}</h5>
+          <div class="bfoot">
+            <span class="dot ${t.priority}"></span>
+            <span class="chip dept">${esc(t.category)}</span>
+            <span class="chip">${esc(t.requester)}</span>
+          </div>
+        </div>`).join('')
+      : `<div class="bempty">—</div>`;
+    return `<div class="bcol">
+      <div class="bcol-head">${status}<span class="cnt">${items.length}</span></div>
+      ${cards}
+    </div>`;
+  }).join('');
+  $$('.bcard', board).forEach((el) => (el.onclick = () => openDrawer(el.dataset.id)));
 }
 
 function ticketCard(t) {
@@ -297,9 +412,10 @@ async function openDrawer(id) {
 
     ${isAgent ? `
     <div class="section">
-      <h3>AI suggested first response</h3>
-      <button class="ghost" id="btnDraft">${ICON.ai()} Generate draft reply</button>
-      <textarea class="draft-box" id="draftBox" placeholder="Click generate to draft a first response based on this ticket and similar resolved cases…"></textarea>
+      <h3>AI agent assist</h3>
+      <button class="ghost" id="btnDraft">${ICON.ai()} Analyse & draft reply</button>
+      <div id="insights" class="insights" hidden></div>
+      <textarea class="draft-box" id="draftBox" placeholder="Click analyse to get a summary, suggested resolution steps, and a drafted first reply…"></textarea>
     </div>
     <div class="section">
       <h3>Resolution notes</h3>
@@ -352,15 +468,24 @@ async function changeStatus(id, status) {
 }
 
 async function generateDraft(id) {
-  const box = $('#draftBox'), btn = $('#btnDraft');
-  btn.innerHTML = `<span class="spin">${ICON.ai()}</span> Drafting…`;
+  const box = $('#draftBox'), btn = $('#btnDraft'), ins = $('#insights');
+  btn.innerHTML = `<span class="spin">${ICON.ai()}</span> Analysing…`;
   try {
-    const { draft } = await api(`/api/ai/draft/${id}`, { method: 'POST' });
-    box.value = draft;
+    const r = await api(`/api/ai/draft/${id}`, { method: 'POST' });
+    box.value = r.draft || '';
+    ins.hidden = false;
+    ins.innerHTML =
+      `<div class="ins-card"><div class="ahead">${ICON.ai('#6b7686', 13)} Summary</div><div>${esc(r.summary || '')}</div></div>` +
+      (r.steps && r.steps.length
+        ? `<div class="ins-card"><div class="ahead">Suggested resolution steps</div><ol class="steps">${r.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>`
+        : '') +
+      (r.similar && r.similar.length
+        ? `<div class="ins-card"><div class="ahead">Drawn from</div>${r.similar.map((s) => `<div class="meta">${esc(s.id)} · ${esc(s.title)} <span class="pct">${s.match}%</span></div>`).join('')}</div>`
+        : '');
   } catch (e) {
-    box.value = 'Could not generate a draft: ' + e.message;
+    box.value = 'Could not generate insights: ' + e.message;
   } finally {
-    btn.innerHTML = `${ICON.ai()} Generate draft reply`;
+    btn.innerHTML = `${ICON.ai()} Analyse & draft reply`;
   }
 }
 
