@@ -37,7 +37,9 @@ h3 { font-size: 14px; margin: 0 0 12px; font-weight: 600; }
   position: sticky; top: 0; z-index: 20;
 }
 .brand { display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 16px; }
-.logo { color: var(--accent); font-size: 18px; }
+.logo { display: block; }
+.ic { vertical-align: -2px; }
+.primary, .ghost { display: inline-flex; align-items: center; gap: 7px; }
 .nav { display: flex; gap: 4px; }
 .nav button {
   border: 0; background: transparent; color: var(--muted);

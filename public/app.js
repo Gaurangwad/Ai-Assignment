@@ -21,7 +21,20 @@ const api = async (url, opts) => {
 };
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const debounce = (fn, ms) => { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; };
-const PRI_LABEL = { urgent: '🔴 Urgent', mild: '🟡 Mild', normal: '🟢 Non-urgent' };
+const PRI_TEXT = { urgent: 'Urgent', mild: 'Mild', normal: 'Non-urgent' };
+const PRI_COLOR = { urgent: '#e5484d', mild: '#d9a800', normal: '#2faf5f' };
+
+// Single coloured inline-SVG icons used across the UI (no emoji).
+const ICON = {
+  ai: (c = '#2f6df6', s = 15) =>
+    `<svg class="ic" viewBox="0 0 24 24" width="${s}" height="${s}" fill="${c}" aria-hidden="true"><path d="M12 2l1.7 5L19 8.7l-5.3 1.8L12 16l-1.7-5.5L5 8.7 10.3 7z"/></svg>`,
+  check: (c = '#2faf5f', s = 15) =>
+    `<svg class="ic" viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="${c}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M8 12.5l2.5 2.5L16 9"/></svg>`,
+  dot: (p) =>
+    `<svg class="ic" viewBox="0 0 8 8" width="8" height="8" style="margin-right:5px" aria-hidden="true"><circle cx="4" cy="4" r="4" fill="${PRI_COLOR[p]}"/></svg>`,
+};
+// Coloured-dot priority label for HTML contexts.
+const priLabel = (p) => `${ICON.dot(p)}${PRI_TEXT[p]}`;
 const timeAgo = (iso) => {
   const s = (Date.now() - new Date(iso)) / 1000;
   if (s < 60) return 'just now';
@@ -77,7 +90,7 @@ function buildUserSelect() {
 function buildPriorityPicker() {
   const wrap = $('#priorityPicker');
   wrap.innerHTML = state.meta.priorities
-    .map((p) => `<div class="pri" data-p="${p}">${PRI_LABEL[p].replace(/^\S+\s/, '')}</div>`)
+    .map((p) => `<div class="pri" data-p="${p}">${ICON.dot(p)}${PRI_TEXT[p]}</div>`)
     .join('');
   $$('.pri', wrap).forEach((el) => {
     el.onclick = () => setPriority(el.dataset.p);
@@ -134,7 +147,7 @@ async function runAI() {
 
   const hints = $('#aiHints');
   hints.hidden = false;
-  hints.innerHTML = `<span class="spin">✨</span> Analysing with ${state.meta.ai.enabled ? 'Claude' : 'AI'}…`;
+  hints.innerHTML = `<span class="spin">${ICON.ai()}</span> Analysing with ${state.meta.ai.enabled ? 'Claude' : 'AI'}…`;
 
   try {
     const [cat, similar] = await Promise.all([
@@ -151,7 +164,7 @@ async function runAI() {
     const conf = Math.round((cat.confidence || 0) * 100);
     const badge = cat.source === 'claude' ? 'Claude' : 'AI';
     hints.innerHTML =
-      `<strong>✨ Suggested: ${esc(cat.category)} · ${PRI_LABEL[cat.priority] || cat.priority}</strong>` +
+      `<strong>${ICON.ai()} Suggested: ${esc(cat.category)} · ${cat.priority ? priLabel(cat.priority) : ''}</strong>` +
       ` <span class="ai-tag">${badge} · ${conf}% confident</span>` +
       `<div class="reason">${esc(cat.reason || '')}</div>`;
 
@@ -199,7 +212,7 @@ async function submitTicket() {
       }),
     });
     msg.hidden = false; msg.className = 'inline-msg ok';
-    msg.textContent = `✅ Ticket ${t.id} created and routed to the ${t.category} queue. You'll be notified as it progresses.`;
+    msg.innerHTML = `${ICON.check()} Ticket ${esc(t.id)} created and routed to the ${esc(t.category)} queue. You'll be notified as it progresses.`;
     $('#f-title').value = ''; $('#f-desc').value = '';
     $('#aiHints').hidden = true; $('#similarBox').hidden = true; $('#catTag').hidden = true;
     setPriority('normal');
@@ -265,10 +278,10 @@ async function openDrawer(id) {
         <div class="foot" style="display:flex;gap:6px;margin-top:6px">
           <span class="chip dept">${esc(t.category)}</span>
           <span class="chip status-${t.status.replace(/\s/g, '')}">${esc(t.status)}</span>
-          <span class="chip">${PRI_LABEL[t.priority]}</span>
+          <span class="chip">${priLabel(t.priority)}</span>
         </div>
       </div>
-      <button class="close" id="drawerClose">✕</button>
+      <button class="close" id="drawerClose" aria-label="Close"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#6b7686" stroke-width="2.2" stroke-linecap="round" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg></button>
     </div>
 
     <div class="section">
@@ -285,7 +298,7 @@ async function openDrawer(id) {
     ${isAgent ? `
     <div class="section">
       <h3>AI suggested first response</h3>
-      <button class="ghost" id="btnDraft">✨ Generate draft reply</button>
+      <button class="ghost" id="btnDraft">${ICON.ai()} Generate draft reply</button>
       <textarea class="draft-box" id="draftBox" placeholder="Click generate to draft a first response based on this ticket and similar resolved cases…"></textarea>
     </div>
     <div class="section">
@@ -340,14 +353,14 @@ async function changeStatus(id, status) {
 
 async function generateDraft(id) {
   const box = $('#draftBox'), btn = $('#btnDraft');
-  btn.innerHTML = '<span class="spin">✨</span> Drafting…';
+  btn.innerHTML = `<span class="spin">${ICON.ai()}</span> Drafting…`;
   try {
     const { draft } = await api(`/api/ai/draft/${id}`, { method: 'POST' });
     box.value = draft;
   } catch (e) {
     box.value = 'Could not generate a draft: ' + e.message;
   } finally {
-    btn.innerHTML = '✨ Generate draft reply';
+    btn.innerHTML = `${ICON.ai()} Generate draft reply`;
   }
 }
 
