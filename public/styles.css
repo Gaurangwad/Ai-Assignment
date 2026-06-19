@@ -383,6 +383,9 @@ html[data-theme="dark"] input, html[data-theme="dark"] textarea, html[data-theme
 /* ---------- Agent rail (stats + tackle next) ---------- */
 .tickets-layout { display: block; }
 .tickets-layout.with-rail { display: grid; grid-template-columns: 1fr 280px; gap: 18px; align-items: start; }
+/* Grid items that hold an inner grid/SVG need min-width:0 or the auto-sizing
+   cycle can collapse or overflow their contents (e.g. agent ticket cards). */
+.tickets-main, .tickets-layout > *, .composer-grid > *, .ask-grid > *, .charts > * { min-width: 0; }
 .agent-rail { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 80px; }
 .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .stat { background: var(--bg); border: 1px solid var(--line); border-radius: 10px; padding: 11px; }
