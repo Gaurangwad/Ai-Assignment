@@ -6,6 +6,7 @@
   <title>Helpdesk · Internal Support</title>
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="stylesheet" href="styles.css" />
+  <script>try{var t=localStorage.getItem('hd-theme');if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}</script>
 </head>
 <body>
   <header class="topbar">
@@ -23,6 +24,7 @@
       <button data-view="analytics">Analytics</button>
     </nav>
     <div class="topbar-right">
+      <button id="themeToggle" class="icon-btn" title="Toggle dark mode" aria-label="Toggle dark mode"></button>
       <div class="role-switch" id="roleSwitch" title="Switch perspective">
         <button data-role="employee" class="active">Employee</button>
         <button data-role="agent">Agent</button>
@@ -40,19 +42,32 @@
   </header>
 
   <main id="app">
-    <!-- ============ ASK AI (conversational) ============ -->
+    <!-- ============ ASK AI (conversational) + HOME RAIL ============ -->
     <section class="view" id="view-ask">
-      <div class="chat-wrap">
-        <div class="chat-head">
-          <h1>Ask the help assistant</h1>
-          <p class="sub">Describe your problem in plain words — I'll try to solve it on the spot, or route it to the right team.</p>
+      <div class="ask-grid">
+        <div class="chat-wrap">
+          <div class="chat-head">
+            <h1>Ask the help assistant</h1>
+            <p class="sub">Describe your problem in plain words — I'll try to solve it on the spot, or route it to the right team.</p>
+          </div>
+          <div class="chat-log" id="chatLog"></div>
+          <div class="chat-suggest" id="chatSuggest"></div>
+          <div class="chat-input">
+            <input id="chatBox" type="text" placeholder="e.g. My monitor isn't turning on" autocomplete="off" />
+            <button id="chatSend" class="primary">Send</button>
+          </div>
         </div>
-        <div class="chat-log" id="chatLog"></div>
-        <div class="chat-suggest" id="chatSuggest"></div>
-        <div class="chat-input">
-          <input id="chatBox" type="text" placeholder="e.g. My monitor isn't turning on" autocomplete="off" />
-          <button id="chatSend" class="primary">Send</button>
-        </div>
+
+        <aside class="home-rail" id="homeRail">
+          <div class="rail-card">
+            <div class="rail-head"><span>My open tickets</span><span class="rail-count" id="myOpenCount">0</span></div>
+            <div id="myOpenList" class="rail-list"></div>
+          </div>
+          <div class="rail-card">
+            <div class="rail-head"><span>Recently asked</span><button class="rail-clear" id="clearRecent" hidden>Clear</button></div>
+            <div id="recentList" class="rail-list"></div>
+          </div>
+        </aside>
       </div>
     </section>
 
@@ -128,19 +143,37 @@
 
     <!-- ============ ANALYTICS ============ -->
     <section class="view" id="view-analytics" hidden>
-      <h1>Analytics</h1>
-      <div class="kpi-row" id="kpiRow"></div>
-      <div class="charts">
-        <div class="panel chart-panel">
-          <h3>Tickets per month</h3>
-          <div id="chart-month"></div>
+      <div class="list-header">
+        <h1>Analytics</h1>
+        <div class="filters analytics-bar">
+          <div class="view-toggle" id="sourceToggle">
+            <button data-src="live" class="active">Live tickets</button>
+            <button data-src="csv">Imported CSV</button>
+          </div>
+          <div class="view-toggle" id="granToggle">
+            <button data-g="week">Weekly</button>
+            <button data-g="month" class="active">Monthly</button>
+            <button data-g="quarter">Quarterly</button>
+            <button data-g="year">Yearly</button>
+          </div>
+          <button class="ghost sm" id="importCsvBtn">Import CSV</button>
+          <button class="ghost sm" id="sampleCsvBtn">Sample</button>
+          <input type="file" id="csvFile" accept=".csv,text/csv" hidden />
         </div>
+      </div>
+      <div id="csvBanner" class="csv-banner" hidden></div>
+      <div class="kpi-row" id="kpiRow"></div>
+      <div class="panel chart-panel wide">
+        <div class="chart-head"><h3 id="timelineTitle">Tickets over time</h3><div class="legend" id="timelineLegend"></div></div>
+        <div id="chart-timeline"></div>
+      </div>
+      <div class="charts">
         <div class="panel chart-panel">
           <h3>By department</h3>
           <div id="chart-dept"></div>
         </div>
-        <div class="panel chart-panel">
-          <h3>Open vs In Progress vs Resolved</h3>
+        <div class="panel chart-panel" id="statusPanel">
+          <h3>Status breakdown</h3>
           <div id="chart-status"></div>
         </div>
       </div>

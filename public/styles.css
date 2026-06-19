@@ -304,6 +304,82 @@ button { font: inherit; }
 .chat-suggest button { border: 1px solid var(--line); background: var(--surface); color: var(--muted); border-radius: 20px; padding: 7px 13px; font-size: 12.5px; cursor: pointer; }
 .chat-suggest button:hover { border-color: var(--accent); color: var(--accent); background: var(--accent-soft); }
 
+/* ---------- Dark mode ---------- */
+html[data-theme="dark"] {
+  --bg: #0f141b; --surface: #161c26; --ink: #e7ecf3; --muted: #93a0b3; --line: #27313f;
+  --accent: #5b8bff; --accent-soft: #1b2840;
+  --red-soft: #3a2024; --yellow-soft: #38320f; --green-soft: #123026;
+  --red: #ff6b6f; --yellow: #e8be3a; --green: #46c57e;
+  --shadow: 0 1px 2px rgba(0,0,0,.35), 0 8px 24px rgba(0,0,0,.4);
+}
+html[data-theme="dark"] .chip { background: #232c38; color: var(--muted); }
+html[data-theme="dark"] .chip.dept { background: var(--accent-soft); color: var(--accent); }
+html[data-theme="dark"] .chip.status-Open { background: #283142; color: #aab6c8; }
+html[data-theme="dark"] .chip.status-InProgress { background: #3a2f12; color: #e8be3a; }
+html[data-theme="dark"] .chip.status-Resolved { background: #123026; color: #46c57e; }
+html[data-theme="dark"] .chip.status-Closed { background: #271f44; color: #b9a9ff; }
+html[data-theme="dark"] .assist-head, html[data-theme="dark"] .chat-suggest button:hover { background: var(--accent-soft); }
+html[data-theme="dark"] .selfhelp { background: #123026; border-color: #1d4736; color: #7fe0a8; }
+html[data-theme="dark"] .acard.dup, html[data-theme="dark"] .bubble.bot.warn { background: #2a2410; border-color: #4a3f17; }
+html[data-theme="dark"] .bcol { background: #121821; }
+html[data-theme="dark"] .csv-banner { background: var(--accent-soft); }
+html[data-theme="dark"] input, html[data-theme="dark"] textarea, html[data-theme="dark"] select { background: #10161f; color: var(--ink); }
+
+.icon-btn { border: 1px solid var(--line); background: var(--surface); width: 34px; height: 34px; border-radius: 9px; cursor: pointer; display: inline-flex; align-items: center; justify-content: center; color: var(--muted); }
+.icon-btn:hover { color: var(--ink); border-color: var(--accent); }
+
+/* ---------- Ask AI home rail ---------- */
+.ask-grid { display: grid; grid-template-columns: 1fr 290px; gap: 20px; align-items: start; }
+.home-rail { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 80px; }
+.rail-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); padding: 14px; }
+.rail-head { display: flex; align-items: center; justify-content: space-between; font-weight: 700; font-size: 13px; margin-bottom: 10px; }
+.rail-count { background: var(--accent-soft); color: var(--accent); border-radius: 20px; font-size: 11px; padding: 1px 8px; }
+.rail-clear { border: 0; background: transparent; color: var(--accent); font-size: 12px; cursor: pointer; }
+.rail-list { display: flex; flex-direction: column; gap: 8px; }
+.rail-item { border: 1px solid var(--line); border-radius: 9px; padding: 9px 10px; cursor: pointer; }
+.rail-item:hover { border-color: var(--accent); }
+.rail-item .id { font-size: 10px; color: var(--muted); font-weight: 600; }
+.rail-item h6 { margin: 2px 0 6px; font-size: 13px; font-weight: 600; }
+.rail-empty { color: var(--muted); font-size: 12.5px; padding: 4px 0; }
+.recent-chip { display: flex; align-items: center; gap: 6px; border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; font-size: 12.5px; color: var(--ink); cursor: pointer; }
+.recent-chip:hover { border-color: var(--accent); color: var(--accent); }
+.recent-chip svg { flex: 0 0 auto; }
+
+/* ---------- Progress stepper ---------- */
+.stepper { display: flex; margin: 10px 0 4px; }
+.stepper .st { flex: 1; display: flex; flex-direction: column; align-items: center; position: relative; }
+.stepper .st .bar { position: absolute; top: 7px; right: 50%; width: 100%; height: 3px; background: var(--line); border-radius: 3px; }
+.stepper .st:first-child .bar { display: none; }
+.stepper .st.done .bar, .stepper .st.current .bar { background: var(--accent); }
+.stepper .st .dot { width: 16px; height: 16px; border-radius: 50%; background: var(--line); z-index: 1; }
+.stepper .st.done .dot { background: var(--accent); }
+.stepper .st.current .dot { background: var(--surface); border: 3px solid var(--accent); box-shadow: 0 0 0 4px var(--accent-soft); }
+.stepper .st .lbl { font-size: 10.5px; color: var(--muted); margin-top: 7px; white-space: nowrap; }
+.stepper .st.done .lbl, .stepper .st.current .lbl { color: var(--ink); font-weight: 600; }
+.stepper.mini .dot { width: 11px; height: 11px; }
+.stepper.mini .st .bar { top: 4px; height: 2px; }
+.stepper.mini .lbl { font-size: 9px; margin-top: 4px; }
+
+/* ---------- Analytics toolbar + CSV ---------- */
+.analytics-bar { align-items: center; }
+.ghost.sm { padding: 7px 12px; font-size: 13px; }
+.csv-banner { background: var(--accent-soft); border: 1px solid var(--line); border-radius: 10px; padding: 10px 14px; font-size: 13px; color: var(--ink); margin-bottom: 16px; display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.csv-banner b { color: var(--accent); }
+.csv-banner .x { cursor: pointer; color: var(--muted); border: 0; background: transparent; font-size: 14px; }
+
+/* ---------- Modern charts ---------- */
+.chart-panel.wide { grid-column: 1 / -1; margin-bottom: 16px; }
+.chart-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; flex-wrap: wrap; gap: 8px; }
+.chart-panel svg { display: block; width: 100%; overflow: visible; }
+.chart-panel svg .bar-rect { transition: opacity .15s ease; cursor: default; }
+.chart-panel svg .bar-rect:hover { opacity: .8; }
+.chart-panel svg .dot-pt { transition: r .15s ease; }
+.chart-panel svg text { fill: var(--muted); }
+.chart-panel svg .val { fill: var(--ink); font-weight: 600; }
+.kpi .delta { font-size: 12px; font-weight: 600; margin-top: 4px; }
+.kpi .delta.up { color: var(--green); } .kpi .delta.down { color: var(--red); } .kpi .delta.flat { color: var(--muted); }
+@media (max-width: 900px) { .ask-grid { grid-template-columns: 1fr; } .home-rail { position: static; flex-direction: row; flex-wrap: wrap; } .rail-card { flex: 1; min-width: 240px; } }
+
 .view { animation: fade .2s ease; }
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .spin { display: inline-block; animation: rot 1s linear infinite; }

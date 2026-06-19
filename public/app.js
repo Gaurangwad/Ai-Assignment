@@ -10,6 +10,9 @@ const state = {
   priority: 'normal',
   category: 'IT',
   ticketView: 'list',
+  analyticsSrc: 'live',
+  gran: 'month',
+  csv: null,
 };
 const USERS = ['Priya Sharma', 'Daniel Kim', 'Aisha Khan', 'Tom Reyes', 'Lena Fischer', 'Marco Bianchi'];
 
@@ -58,9 +61,79 @@ async function boot() {
   wireFilters();
   wireBell();
   wireChat();
+  wireTheme();
+  wireAnalytics();
+  renderHomeRail();
   refreshNotifications();
   setInterval(refreshNotifications, 15000);
   showAIStatus();
+}
+
+// ---------------------------------------------------------------------------
+// Dark mode
+// ---------------------------------------------------------------------------
+const SUN = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/></svg>`;
+const MOON = `<svg viewBox="0 0 24 24" width="17" height="17" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`;
+function wireTheme() {
+  const btn = $('#themeToggle');
+  const paint = () => { btn.innerHTML = document.documentElement.getAttribute('data-theme') === 'dark' ? SUN : MOON; };
+  paint();
+  btn.onclick = () => {
+    const dark = document.documentElement.getAttribute('data-theme') === 'dark';
+    if (dark) { document.documentElement.removeAttribute('data-theme'); localStorage.setItem('hd-theme', 'light'); }
+    else { document.documentElement.setAttribute('data-theme', 'dark'); localStorage.setItem('hd-theme', 'dark'); }
+    paint();
+    if (currentView === 'analytics') loadAnalytics(); // recolour charts for theme
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Progress stepper (Open ●—○—○—○ Closed)
+// ---------------------------------------------------------------------------
+function stepperHTML(status, mini = false) {
+  const flow = state.meta.statuses;
+  const cur = flow.indexOf(status);
+  return `<div class="stepper${mini ? ' mini' : ''}">${flow.map((s, i) => {
+    const cls = i < cur ? 'done' : i === cur ? 'current' : '';
+    return `<div class="st ${cls}"><span class="bar"></span><span class="dot"></span>${mini ? '' : `<span class="lbl">${s}</span>`}</div>`;
+  }).join('')}</div>`;
+}
+
+// ---------------------------------------------------------------------------
+// Home rail: My open tickets + Recently asked
+// ---------------------------------------------------------------------------
+function recentKey() { return `hd-recent-${state.user}`; }
+function getRecent() { try { return JSON.parse(localStorage.getItem(recentKey()) || '[]'); } catch { return []; } }
+function pushRecent(q) {
+  const list = getRecent().filter((x) => x.toLowerCase() !== q.toLowerCase());
+  list.unshift(q);
+  localStorage.setItem(recentKey(), JSON.stringify(list.slice(0, 6)));
+}
+
+async function renderHomeRail() {
+  // My open tickets
+  try {
+    const rows = await api('/api/tickets?requester=' + encodeURIComponent(state.user));
+    const open = rows.filter((t) => t.status !== 'Closed');
+    $('#myOpenCount').textContent = open.length;
+    $('#myOpenList').innerHTML = open.length
+      ? open.slice(0, 5).map((t) => `<div class="rail-item" data-id="${t.id}">
+          <div class="id">${t.id} · ${esc(t.category)}</div>
+          <h6>${esc(t.title)}</h6>
+          ${stepperHTML(t.status, true)}
+        </div>`).join('')
+      : `<div class="rail-empty">No open tickets — nice.</div>`;
+    $$('#myOpenList .rail-item').forEach((el) => (el.onclick = () => openDrawer(el.dataset.id)));
+  } catch { /* ignore */ }
+
+  // Recently asked
+  const recent = getRecent();
+  $('#clearRecent').hidden = !recent.length;
+  $('#recentList').innerHTML = recent.length
+    ? recent.map((q) => `<div class="recent-chip">${ICON.ai('#6b7686', 13)}<span>${esc(q)}</span></div>`).join('')
+    : `<div class="rail-empty">Your recent questions show up here.</div>`;
+  $$('#recentList .recent-chip').forEach((el, i) => (el.onclick = () => { switchView('ask'); submitChat(recent[i]); }));
+  $('#clearRecent').onclick = () => { localStorage.removeItem(recentKey()); renderHomeRail(); };
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +171,8 @@ async function submitChat(text) {
   const message = (text || box.value).trim();
   if (!message) return;
   box.value = '';
+  pushRecent(message);
+  renderHomeRail();
   addBubble('user', esc(message));
   const thinking = addBubble('bot', `<div class="botline">${ICON.ai('#2f6df6', 15)} Assistant</div><span class="spin">${ICON.ai('#6b7686', 14)}</span> Searching our help docs…`);
   try {
@@ -208,7 +283,7 @@ function buildUserSelect() {
   const sel = $('#userSelect');
   USERS.forEach((u) => sel.append(new Option(u, u)));
   sel.value = state.user;
-  sel.onchange = () => { state.user = sel.value; refreshNotifications(); if (currentView === 'tickets') loadTickets(); };
+  sel.onchange = () => { state.user = sel.value; refreshNotifications(); renderHomeRail(); if (currentView === 'tickets') loadTickets(); };
 }
 
 function buildPriorityPicker() {
@@ -239,6 +314,7 @@ function switchView(view) {
   $$('.view').forEach((v) => (v.hidden = v.id !== `view-${view}`));
   if (view === 'tickets') loadTickets();
   if (view === 'analytics') loadAnalytics();
+  if (view === 'ask') renderHomeRail();
 }
 function wireRoleSwitch() {
   $$('#roleSwitch button').forEach((b) => {
@@ -420,6 +496,7 @@ async function submitTicket() {
     lastAssist = null; lastApplied = null;
     setPriority('normal');
     refreshNotifications();
+    renderHomeRail();
   } catch (e) {
     msg.hidden = false; msg.className = 'inline-msg err'; msg.textContent = e.message;
   }
@@ -531,8 +608,9 @@ async function openDrawer(id) {
     </div>
 
     <div class="section">
-      <h3>Lifecycle</h3>
-      ${isAgent ? statusFlow(t) : `<div class="agent-only-note">Switch to the Agent view to update status. Current: <strong>${esc(t.status)}</strong></div>`}
+      <h3>Progress</h3>
+      ${stepperHTML(t.status)}
+      ${isAgent ? statusFlow(t) : `<div class="agent-only-note" style="margin-top:8px">You'll be notified automatically as this moves. Switch to the Agent view to update it.</div>`}
     </div>
 
     ${isAgent ? `
@@ -590,6 +668,7 @@ async function changeStatus(id, status) {
   openDrawer(id);
   loadTickets();
   refreshNotifications();
+  renderHomeRail();
 }
 
 async function generateDraft(id) {
@@ -655,70 +734,259 @@ async function refreshNotifications() {
 }
 
 // ---------------------------------------------------------------------------
-// Analytics — self-rendered SVG charts (no external libraries)
+// Analytics — modern self-rendered SVG charts + CSV import (no libraries)
 // ---------------------------------------------------------------------------
+const DEPT_COLORS = { IT: '#2f6df6', HR: '#e5484d', Finance: '#2faf5f', Admin: '#d9a800' };
+const PALETTE = ['#2f6df6', '#7c5cff', '#2faf5f', '#d9a800', '#e5484d', '#0bb3c4', '#ef7d2e', '#9b59b6'];
+const STATUS_COLORS = { Open: '#7689a5', 'In Progress': '#d9a800', Resolved: '#2faf5f', Closed: '#7c5cff' };
+const GRAN_LABEL = { week: 'weekly', month: 'monthly', quarter: 'quarterly', year: 'yearly' };
+const cssVar = (n) => (getComputedStyle(document.documentElement).getPropertyValue(n).trim() || '#888');
+const deptColor = (d, i) => DEPT_COLORS[d] || PALETTE[i % PALETTE.length];
+
+function wireAnalytics() {
+  $$('#sourceToggle button').forEach((b) => (b.onclick = () => {
+    if (b.dataset.src === 'csv' && !state.csv) { triggerCsv(); return; }
+    state.analyticsSrc = b.dataset.src;
+    $$('#sourceToggle button').forEach((x) => x.classList.toggle('active', x === b));
+    loadAnalytics();
+  }));
+  $$('#granToggle button').forEach((b) => (b.onclick = () => {
+    state.gran = b.dataset.g;
+    $$('#granToggle button').forEach((x) => x.classList.toggle('active', x === b));
+    loadAnalytics();
+  }));
+  $('#importCsvBtn').onclick = triggerCsv;
+  $('#sampleCsvBtn').onclick = downloadSampleCsv;
+  $('#csvFile').addEventListener('change', handleCsvFile);
+}
+function triggerCsv() { $('#csvFile').click(); }
+
 async function loadAnalytics() {
-  const s = await api('/api/stats');
-  $('#kpiRow').innerHTML = [
-    ['Total tickets', s.total],
-    ['Open', s.byStatus.Open || 0],
-    ['In Progress', s.byStatus['In Progress'] || 0],
-    ['Resolved', (s.byStatus.Resolved || 0) + (s.byStatus.Closed || 0)],
-  ].map(([l, n]) => `<div class="kpi"><div class="n">${n}</div><div class="l">${l}</div></div>`).join('');
-
-  $('#chart-month').innerHTML = barChart(
-    s.byMonth.map((m) => ({ label: m.month.slice(5), value: m.count })),
-    '#2f6df6'
-  );
-  $('#chart-dept').innerHTML = barChart(
-    Object.entries(s.byDept).map(([k, v]) => ({ label: k, value: v })),
-    '#7c5cff'
-  );
-  $('#chart-status').innerHTML = donut([
-    { label: 'Open', value: s.byStatus.Open || 0, color: '#56627a' },
-    { label: 'In Progress', value: s.byStatus['In Progress'] || 0, color: '#d9a800' },
-    { label: 'Resolved', value: s.byStatus.Resolved || 0, color: '#2faf5f' },
-    { label: 'Closed', value: s.byStatus.Closed || 0, color: '#6b53c9' },
-  ]);
+  let records, hasStatus;
+  if (state.analyticsSrc === 'csv') {
+    if (!state.csv) return renderCsvPrompt();
+    records = state.csv.records; hasStatus = state.csv.hasStatus;
+    showBanner();
+  } else {
+    const rows = await api('/api/tickets');
+    records = rows.map((t) => ({ date: t.createdAt, department: t.category, status: t.status, priority: t.priority }));
+    hasStatus = true;
+    $('#csvBanner').hidden = true;
+  }
+  renderKpis(records, hasStatus);
+  renderTimeline(records);
+  renderDeptChart(records);
+  renderStatusChart(records, hasStatus);
 }
 
-function barChart(data, color) {
-  const W = 360, H = 180, pad = 28;
+// ---- aggregation by granularity ----
+function weekStart(d) { const x = new Date(d); const day = (x.getDay() + 6) % 7; x.setDate(x.getDate() - day); x.setHours(0, 0, 0, 0); return x; }
+function periodOf(date, gran) {
+  const d = new Date(date);
+  if (gran === 'year') return { key: `${d.getFullYear()}`, label: `${d.getFullYear()}`, sort: d.getFullYear() };
+  if (gran === 'quarter') { const q = Math.floor(d.getMonth() / 3) + 1; return { key: `${d.getFullYear()}Q${q}`, label: `Q${q} '${String(d.getFullYear()).slice(2)}`, sort: d.getFullYear() * 4 + q }; }
+  if (gran === 'week') { const w = weekStart(d); return { key: w.toISOString().slice(0, 10), label: w.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }), sort: w.getTime() }; }
+  return { key: `${d.getFullYear()}-${d.getMonth()}`, label: d.toLocaleDateString(undefined, { month: 'short', year: '2-digit' }), sort: d.getFullYear() * 12 + d.getMonth() };
+}
+function aggregate(records, gran) {
+  const depts = [...new Set(records.map((r) => r.department))];
+  const map = new Map();
+  records.forEach((r) => {
+    const p = periodOf(r.date, gran);
+    if (!map.has(p.key)) map.set(p.key, { label: p.label, sort: p.sort, counts: {} });
+    const c = map.get(p.key).counts; c[r.department] = (c[r.department] || 0) + 1;
+  });
+  const periods = [...map.values()].sort((a, b) => a.sort - b.sort);
+  return {
+    labels: periods.map((p) => p.label), periods, depts,
+    series: depts.map((d, i) => ({ name: d, color: deptColor(d, i), points: periods.map((p) => p.counts[d] || 0) })),
+  };
+}
+
+function renderKpis(records, hasStatus) {
+  const agg = aggregate(records, state.gran);
+  const sum = (p) => (p ? Object.values(p.counts).reduce((a, b) => a + b, 0) : 0);
+  const cur = sum(agg.periods.at(-1)), prv = sum(agg.periods.at(-2));
+  const delta = prv ? Math.round((cur - prv) / prv * 100) : (cur ? 100 : 0);
+  const arrow = delta > 0 ? `<div class="delta up">▲ ${delta}% vs prev</div>`
+    : delta < 0 ? `<div class="delta down">▼ ${Math.abs(delta)}% vs prev</div>`
+      : `<div class="delta flat">— no change</div>`;
+  const cards = [['Total', records.length, agg.periods.length ? arrow : '']];
+  if (hasStatus) {
+    const c = {}; records.forEach((r) => { if (r.status) c[r.status] = (c[r.status] || 0) + 1; });
+    cards.push(['Open', c.Open || 0, ''], ['In Progress', c['In Progress'] || 0, ''], ['Resolved', (c.Resolved || 0) + (c.Closed || 0), '']);
+  } else {
+    const depts = new Set(records.map((r) => r.department)).size;
+    const dates = records.map((r) => +new Date(r.date)).filter(Boolean);
+    const span = dates.length ? `${new Date(Math.min(...dates)).toLocaleDateString()} – ${new Date(Math.max(...dates)).toLocaleDateString()}` : '—';
+    cards.push(['Departments', depts, ''], ['Latest period', cur, ''], ['Date range', `<span style="font-size:12px">${span}</span>`, '']);
+  }
+  $('#kpiRow').innerHTML = cards.map(([l, n, d]) => `<div class="kpi"><div class="n">${n}</div><div class="l">${l}</div>${d || ''}</div>`).join('');
+}
+
+function renderTimeline(records) {
+  const agg = aggregate(records, state.gran);
+  $('#timelineTitle').textContent = `Tickets over time · ${GRAN_LABEL[state.gran]}`;
+  if (!agg.labels.length) { $('#chart-timeline').innerHTML = `<div class="empty">No data for this view.</div>`; $('#timelineLegend').innerHTML = ''; return; }
+  $('#chart-timeline').innerHTML = lineAreaChart(agg.labels, agg.series);
+  $('#timelineLegend').innerHTML = agg.series.map((s) => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('');
+}
+
+function renderDeptChart(records) {
+  const counts = {}; records.forEach((r) => (counts[r.department] = (counts[r.department] || 0) + 1));
+  const data = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v], i) => ({ label: k, value: v, color: deptColor(k, i) }));
+  $('#chart-dept').innerHTML = data.length ? barChartV(data) : `<div class="empty">No data.</div>`;
+}
+
+function renderStatusChart(records, hasStatus) {
+  const panel = $('#statusPanel');
+  if (!hasStatus) { panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  const counts = {}; records.forEach((r) => { if (r.status) counts[r.status] = (counts[r.status] || 0) + 1; });
+  const order = state.meta.statuses;
+  const data = order.filter((s) => counts[s]).map((s) => ({ label: s, value: counts[s], color: STATUS_COLORS[s] || '#888' }));
+  Object.keys(counts).filter((s) => !order.includes(s)).forEach((s, i) => data.push({ label: s, value: counts[s], color: PALETTE[i % PALETTE.length] }));
+  $('#chart-status').innerHTML = data.length ? donutModern(data) : `<div class="empty">No status data.</div>`;
+}
+
+// ---- chart primitives ----
+function lineAreaChart(labels, series) {
+  const W = 760, H = 280, padL = 32, padR = 14, padT = 16, padB = 34;
+  const line = cssVar('--line');
+  const n = labels.length;
+  const maxV = Math.max(1, ...series.flatMap((s) => s.points));
+  const x = (i) => (n <= 1 ? padL + (W - padL - padR) / 2 : padL + i * (W - padL - padR) / (n - 1));
+  const y = (v) => padT + (1 - v / maxV) * (H - padT - padB);
+  let grid = '';
+  const ticks = 4;
+  for (let t = 0; t <= ticks; t++) {
+    const val = Math.round(maxV * t / ticks), yy = y(val);
+    grid += `<line x1="${padL}" y1="${yy}" x2="${W - padR}" y2="${yy}" stroke="${line}" stroke-dasharray="3 5"/><text x="${padL - 7}" y="${yy + 3}" text-anchor="end" font-size="10">${val}</text>`;
+  }
+  const step = Math.max(1, Math.ceil(n / 8));
+  let xlab = '';
+  labels.forEach((l, i) => { if (i % step === 0 || i === n - 1) xlab += `<text x="${x(i)}" y="${H - padB + 17}" text-anchor="middle" font-size="10">${esc(l)}</text>`; });
+  let defs = '', paths = '';
+  series.forEach((s, si) => {
+    const gid = `tl${si}`;
+    defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${s.color}" stop-opacity="0.30"/><stop offset="1" stop-color="${s.color}" stop-opacity="0"/></linearGradient>`;
+    const pts = s.points.map((v, i) => `${x(i)},${y(v)}`);
+    const area = `M ${x(0)},${y(0)} L ${pts.join(' L ')} L ${x(n - 1)},${y(0)} Z`;
+    const dots = s.points.map((v, i) => `<circle class="dot-pt" cx="${x(i)}" cy="${y(v)}" r="3" fill="${s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></circle>`).join('');
+    paths += `<path d="${area}" fill="url(#${gid})"/><path d="M ${pts.join(' L ')}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}"><defs>${defs}</defs>${grid}<line x1="${padL}" y1="${y(0)}" x2="${W - padR}" y2="${y(0)}" stroke="${line}"/>${paths}${xlab}</svg>`;
+}
+
+function barChartV(data) {
+  const W = 360, H = 220, padL = 26, padR = 10, padT = 18, padB = 32;
+  const line = cssVar('--line');
   const max = Math.max(1, ...data.map((d) => d.value));
-  const bw = (W - pad * 2) / data.length;
-  const bars = data.map((d, i) => {
-    const h = (d.value / max) * (H - pad * 2);
-    const x = pad + i * bw + bw * 0.18;
-    const y = H - pad - h;
-    const w = bw * 0.64;
-    return `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="4" fill="${color}"></rect>
-      <text x="${x + w / 2}" y="${y - 6}" text-anchor="middle" font-size="11" fill="#1c2430" font-weight="600">${d.value}</text>
-      <text x="${x + w / 2}" y="${H - pad + 16}" text-anchor="middle" font-size="11" fill="#6b7686">${esc(d.label)}</text>`;
-  }).join('');
-  return `<svg viewBox="0 0 ${W} ${H}" width="100%"><line x1="${pad}" y1="${H - pad}" x2="${W - pad}" y2="${H - pad}" stroke="#e6e9ee"/>${bars}</svg>`;
+  const bw = (W - padL - padR) / data.length;
+  const y = (v) => padT + (1 - v / max) * (H - padT - padB);
+  let defs = '', bars = '';
+  data.forEach((d, i) => {
+    const gid = `bg${i}`, c = d.color;
+    defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="${c}" stop-opacity="0.7"/></linearGradient>`;
+    const bx = padL + i * bw + bw * 0.2, w = bw * 0.6, by = y(d.value), bh = (H - padB) - by;
+    bars += `<rect class="bar-rect" x="${bx}" y="${by}" width="${w}" height="${bh}" rx="6" fill="url(#${gid})"><title>${esc(d.label)}: ${d.value}</title></rect>
+      <text class="val" x="${bx + w / 2}" y="${by - 6}" text-anchor="middle" font-size="11">${d.value}</text>
+      <text x="${bx + w / 2}" y="${H - padB + 15}" text-anchor="middle" font-size="10.5">${esc(d.label)}</text>`;
+  });
+  return `<svg viewBox="0 0 ${W} ${H}"><defs>${defs}</defs><line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="${line}"/>${bars}</svg>`;
 }
 
-function donut(data) {
+function donutModern(data) {
   const total = data.reduce((a, b) => a + b.value, 0) || 1;
-  const R = 70, r = 44, cx = 90, cy = 90;
-  let angle = -Math.PI / 2;
-  const arcs = data.map((d) => {
-    const frac = d.value / total;
-    const a2 = angle + frac * Math.PI * 2;
-    const large = frac > 0.5 ? 1 : 0;
-    const x1 = cx + R * Math.cos(angle), y1 = cy + R * Math.sin(angle);
-    const x2 = cx + R * Math.cos(a2), y2 = cy + R * Math.sin(a2);
-    const xi2 = cx + r * Math.cos(a2), yi2 = cy + r * Math.sin(a2);
-    const xi1 = cx + r * Math.cos(angle), yi1 = cy + r * Math.sin(angle);
-    angle = a2;
-    if (frac === 0) return '';
-    return `<path d="M ${x1} ${y1} A ${R} ${R} 0 ${large} 1 ${x2} ${y2} L ${xi2} ${yi2} A ${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z" fill="${d.color}"></path>`;
-  }).join('');
+  const cx = 90, cy = 90, r = 62, C = 2 * Math.PI * r, gap = data.filter((d) => d.value > 0).length > 1 ? 5 : 0;
+  let off = 0, segs = '';
+  data.forEach((d) => {
+    if (d.value <= 0) return;
+    const len = d.value / total * C, dash = Math.max(0.5, len - gap);
+    segs += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${d.color}" stroke-width="15" stroke-linecap="round" stroke-dasharray="${dash} ${C - dash}" stroke-dashoffset="${-off}" transform="rotate(-90 ${cx} ${cy})"><title>${esc(d.label)}: ${d.value}</title></circle>`;
+    off += len;
+  });
   const legend = data.map((d) => `<span><i style="background:${d.color}"></i>${esc(d.label)} (${d.value})</span>`).join('');
-  return `<svg viewBox="0 0 180 180" width="180" height="180" style="display:block;margin:0 auto">${arcs}
-    <text x="90" y="86" text-anchor="middle" font-size="22" font-weight="700" fill="#1c2430">${total}</text>
-    <text x="90" y="104" text-anchor="middle" font-size="11" fill="#6b7686">total</text></svg>
-    <div class="legend">${legend}</div>`;
+  return `<svg viewBox="0 0 180 180" width="180" height="180" style="margin:0 auto">${segs}<text x="90" y="86" text-anchor="middle" font-size="22" font-weight="700" fill="${cssVar('--ink')}">${total}</text><text x="90" y="104" text-anchor="middle" font-size="11" fill="${cssVar('--muted')}">total</text></svg><div class="legend">${legend}</div>`;
+}
+
+// ---- CSV import ----
+function splitCsvLine(line) {
+  const out = []; let cur = '', q = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') { if (q && line[i + 1] === '"') { cur += '"'; i++; } else q = !q; }
+    else if (ch === ',' && !q) { out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur); return out.map((s) => s.trim());
+}
+function parseCsv(text) {
+  const lines = text.replace(/\r\n?/g, '\n').split('\n').filter((l) => l.trim());
+  if (lines.length < 2) return { error: 'The CSV looks empty.' };
+  const header = splitCsvLine(lines[0]).map((h) => h.toLowerCase());
+  const find = (names) => header.findIndex((h) => names.includes(h));
+  const di = find(['date', 'created', 'createdat', 'created_at', 'timestamp', 'time', 'opened', 'open_date']);
+  const ci = find(['department', 'dept', 'category', 'team']);
+  const si = find(['status', 'state']);
+  const pi = find(['priority', 'urgency']);
+  if (di < 0 || ci < 0) return { error: 'CSV needs a date column and a department (or category) column.' };
+  const records = [];
+  for (let i = 1; i < lines.length; i++) {
+    const f = splitCsvLine(lines[i]);
+    const dt = new Date(f[di]); if (isNaN(dt)) continue;
+    const dep = (f[ci] || '').trim(); if (!dep) continue;
+    const canon = ['IT', 'HR', 'Finance', 'Admin'].find((d) => d.toLowerCase() === dep.toLowerCase());
+    records.push({ date: dt.toISOString(), department: canon || dep, status: si >= 0 ? f[si] : undefined, priority: pi >= 0 ? f[pi] : undefined });
+  }
+  return { records, hasStatus: si >= 0 };
+}
+function handleCsvFile(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    const res = parseCsv(String(reader.result));
+    if (res.error || !res.records || !res.records.length) { alertBanner(res.error || 'No valid rows found.'); return; }
+    const dates = res.records.map((r) => +new Date(r.date));
+    state.csv = { name: file.name, records: res.records, hasStatus: res.hasStatus, min: new Date(Math.min(...dates)), max: new Date(Math.max(...dates)) };
+    state.analyticsSrc = 'csv';
+    $$('#sourceToggle button').forEach((x) => x.classList.toggle('active', x.dataset.src === 'csv'));
+    loadAnalytics();
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+function showBanner() {
+  const c = state.csv;
+  const b = $('#csvBanner');
+  b.hidden = false;
+  b.innerHTML = `<div>Showing imported <b>${esc(c.name)}</b> — ${c.records.length} rows · ${c.min.toLocaleDateString()} → ${c.max.toLocaleDateString()}</div><button class="x" id="csvClear">Use live data ✕</button>`;
+  $('#csvClear').onclick = () => { state.csv = null; state.analyticsSrc = 'live'; $$('#sourceToggle button').forEach((x) => x.classList.toggle('active', x.dataset.src === 'live')); loadAnalytics(); };
+}
+function alertBanner(msg) {
+  const b = $('#csvBanner'); b.hidden = false;
+  b.innerHTML = `<div style="color:var(--red)">${esc(msg)} Try the Sample for the expected format.</div><button class="x" id="csvClear">✕</button>`;
+  $('#csvClear').onclick = () => { b.hidden = true; };
+}
+function renderCsvPrompt() {
+  $('#kpiRow').innerHTML = '';
+  $('#chart-timeline').innerHTML = `<div class="empty">Import a CSV of issues (date + department, optional status/priority) to see real-time timeline analytics. Use “Sample” for the format.</div>`;
+  $('#timelineLegend').innerHTML = ''; $('#chart-dept').innerHTML = ''; $('#statusPanel').style.display = 'none';
+}
+function downloadSampleCsv() {
+  const deps = ['IT', 'HR', 'Finance', 'Admin'], pr = ['urgent', 'mild', 'normal'], st = ['Open', 'In Progress', 'Resolved', 'Closed'];
+  const types = { IT: 'VPN issue', HR: 'Leave request', Finance: 'Expense claim', Admin: 'Access card' };
+  const rows = [['date', 'department', 'priority', 'status', 'type']];
+  const today = new Date();
+  for (let i = 0; i < 48; i++) {
+    const d = new Date(today); d.setDate(d.getDate() - Math.floor(Math.random() * 330));
+    const dep = deps[i % 4];
+    rows.push([d.toISOString().slice(0, 10), dep, pr[i % 3], st[i % 4], types[dep]]);
+  }
+  const blob = new Blob([rows.map((r) => r.join(',')).join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'helpdesk-sample.csv'; a.click();
+  URL.revokeObjectURL(url);
 }
 
 boot().catch((e) => {
