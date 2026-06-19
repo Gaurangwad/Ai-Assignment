@@ -330,8 +330,9 @@ function wireNav() {
   $$('#nav button').forEach((b) => (b.onclick = () => switchView(b.dataset.view)));
 }
 function switchView(view) {
-  // Analytics is agent-only.
-  if (view === 'analytics' && state.role !== 'agent') view = 'ask';
+  // Analytics is agent-only; Ask AI is employee-only.
+  if (view === 'analytics' && state.role !== 'agent') view = 'tickets';
+  if (view === 'ask' && state.role !== 'employee') view = 'tickets';
   currentView = view;
   $$('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   $$('.view').forEach((v) => (v.hidden = v.id !== `view-${view}`));
@@ -340,12 +341,20 @@ function switchView(view) {
   if (view === 'ask') renderHomeRail();
 }
 
-// Show/hide role-restricted UI (employees can't see Analytics).
+// Role-restricted UI: Analytics + RAG bot are agent-only; Ask AI is employee-only.
 function applyRoleVisibility() {
   const isEmp = state.role === 'employee';
-  const btn = $('#nav button[data-view="analytics"]');
-  if (btn) btn.style.display = isEmp ? 'none' : '';
+  const analyticsBtn = $('#nav button[data-view="analytics"]');
+  const askBtn = $('#nav button[data-view="ask"]');
+  if (analyticsBtn) analyticsBtn.style.display = isEmp ? 'none' : '';
+  if (askBtn) askBtn.style.display = isEmp ? '' : 'none';
+  // RAG knowledge bot — agent only.
+  const fab = $('#ragFab'), panel = $('#ragPanel');
+  if (isEmp) { if (fab) fab.style.display = 'none'; if (panel) panel.hidden = true; }
+  else if (fab && panel) { fab.style.display = panel.hidden ? '' : 'none'; }
+  // Redirect away from a view the current role can't access.
   if (isEmp && currentView === 'analytics') switchView('ask');
+  if (!isEmp && currentView === 'ask') switchView('tickets');
 }
 function wireRoleSwitch() {
   $$('#roleSwitch button').forEach((b) => {
