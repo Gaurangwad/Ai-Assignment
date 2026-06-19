@@ -1,10 +1,10 @@
-# Helpdesk — Internal Support Ticketing with an AI Layer
+# Internal Support Ticketing with an AI Layer
 
 **Project Overview**
 
 ## 1. What it is
 
-Helpdesk is a web application through which employees can raise support tickets to
+This is a web application through which employees can raise support tickets to
 internal departments — **IT, HR, Finance, and Admin** — and track them to
 resolution. It covers the full ticket lifecycle: an employee describes a problem,
 the ticket is routed to the right department queue, an agent moves it through

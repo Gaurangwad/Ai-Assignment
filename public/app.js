@@ -264,8 +264,8 @@ function raiseFromChat(t) {
 
 function showAIStatus() {
   document.title = state.meta.ai.enabled
-    ? 'Helpdesk · AI-assisted support'
-    : 'Helpdesk · Internal Support';
+    ? 'AI-assisted support'
+    : 'Internal Support';
 }
 
 function hydrateSelects() {
@@ -985,7 +985,7 @@ function downloadSampleCsv() {
   }
   const blob = new Blob([rows.map((r) => r.join(',')).join('\n')], { type: 'text/csv' });
   const url = URL.createObjectURL(blob);
-  const a = document.createElement('a'); a.href = url; a.download = 'helpdesk-sample.csv'; a.click();
+  const a = document.createElement('a'); a.href = url; a.download = 'tickets-sample.csv'; a.click();
   URL.revokeObjectURL(url);
 }
 

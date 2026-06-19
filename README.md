@@ -1,4 +1,4 @@
-# Helpdesk — Internal Support Ticketing with an AI Layer
+# Internal Support Ticketing with an AI Layer
 
 A minimalist web app for employees to raise support tickets to internal
 departments (**IT, HR, Finance, Admin**) and track them through their full

@@ -123,7 +123,7 @@ app.get('/api/stats', (req, res) => {
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
     const ai = aiStatus();
-    console.log(`Helpdesk running on http://localhost:${PORT}`);
+    console.log(`Server running on http://localhost:${PORT}`);
     console.log(`AI layer: ${ai.enabled ? `Claude (${ai.model})` : 'heuristic fallback (set ANTHROPIC_API_KEY for Claude)'}`);
   });
 }

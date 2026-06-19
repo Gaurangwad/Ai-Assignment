@@ -1,5 +1,5 @@
 {
-  "name": "helpdesk",
+  "name": "internal-support-ticketing",
   "version": "1.0.0",
   "description": "Internal support ticketing tool with an AI layer and built-in analytics.",
   "type": "module",
