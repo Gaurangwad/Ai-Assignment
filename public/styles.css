@@ -412,6 +412,22 @@ html[data-theme="dark"] input, html[data-theme="dark"] textarea, html[data-theme
 .csat-done { display: inline-flex; align-items: center; gap: 7px; color: var(--muted); font-size: 13px; }
 @media (max-width: 900px) { .tickets-layout.with-rail { grid-template-columns: 1fr; } .agent-rail { position: static; flex-direction: row; flex-wrap: wrap; } .agent-rail .rail-card { flex: 1; min-width: 240px; } }
 
+/* ---------- Rows (compact list) view — urgency colour as an end strip ---------- */
+.rows-list { display: flex; flex-direction: column; gap: 7px; }
+.trow {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 10px;
+  padding: 11px 0 11px 14px; cursor: pointer; box-shadow: var(--shadow); overflow: hidden;
+}
+.trow:hover { border-color: var(--accent); }
+.trow .tr-id { color: var(--muted); font-size: 11px; font-weight: 600; flex: 0 0 auto; width: 56px; }
+.trow .tr-title { flex: 1 1 auto; font-size: 14px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.trow .tr-req { color: var(--muted); font-size: 12px; flex: 0 0 auto; }
+.trow .chip { flex: 0 0 auto; }
+/* The only place urgency colour appears in this view: a strip at the row's end. */
+.trow .tr-strip { flex: 0 0 auto; width: 6px; align-self: stretch; margin-left: 4px; }
+@media (max-width: 640px) { .trow .tr-req, .trow .chip.dept { display: none; } }
+
 .view { animation: fade .2s ease; }
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .spin { display: inline-block; animation: rot 1s linear infinite; }

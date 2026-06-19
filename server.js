@@ -126,11 +126,12 @@ app.post('/api/ai/draft/:id', asyncH(async (req, res) => {
 
 // --- Notifications --------------------------------------------------------
 app.get('/api/notifications', (req, res) => {
-  res.json(listNotifications(req.query.requester));
+  res.json(listNotifications({ requester: req.query.requester, audience: req.query.audience }));
 });
 
 app.post('/api/notifications/read', (req, res) => {
-  markNotificationsRead((req.body && req.body.requester) || (req.query && req.query.requester));
+  const b = req.body || {};
+  markNotificationsRead({ requester: b.requester, audience: b.audience });
   res.json({ ok: true });
 });
 

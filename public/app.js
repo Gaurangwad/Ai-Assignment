@@ -322,7 +322,8 @@ function wireRoleSwitch() {
       state.role = b.dataset.role;
       $$('#roleSwitch button').forEach((x) => x.classList.toggle('active', x === b));
       $('#userSelect').style.display = state.role === 'agent' ? 'none' : '';
-      $('#bell').style.display = state.role === 'agent' ? 'none' : '';
+      $('#bell').title = state.role === 'agent' ? 'Urgent ticket alerts' : 'Notifications';
+      refreshNotifications();
       if (currentView === 'tickets') loadTickets();
     };
   });
@@ -528,11 +529,28 @@ async function loadTickets() {
   $('#ticketsTitle').textContent = state.role === 'employee' ? `My tickets` : 'Department queues';
 
   const rows = await api('/api/tickets?' + params.toString());
-  const board = state.ticketView === 'board';
-  $('#ticketGrid').hidden = board;
-  $('#board').hidden = !board;
-  board ? renderBoard(rows) : renderList(rows);
+  const mode = state.ticketView; // 'list' (cards) | 'rows' | 'board'
+  $('#ticketGrid').hidden = mode !== 'list';
+  $('#rowsList').hidden = mode !== 'rows';
+  $('#board').hidden = mode !== 'board';
+  if (mode === 'board') renderBoard(rows);
+  else if (mode === 'rows') renderRows(rows);
+  else renderList(rows);
   renderAgentRail();
+}
+
+function renderRows(rows) {
+  const el = $('#rowsList');
+  if (!rows.length) { el.innerHTML = `<div class="empty">No tickets match these filters.</div>`; return; }
+  el.innerHTML = rows.map((t) => `<div class="trow" data-id="${t.id}">
+      <span class="tr-id">${t.id}</span>
+      <span class="tr-title">${esc(t.title)}</span>
+      <span class="chip dept">${esc(t.category)}</span>
+      <span class="chip status-${t.status.replace(/\s/g, '')}">${esc(t.status)}</span>
+      <span class="tr-req">${esc(t.requester)}</span>
+      <span class="tr-strip" style="background:${PRI_COLOR[t.priority]}" title="${PRI_TEXT[t.priority]}"></span>
+    </div>`).join('');
+  $$('.trow', el).forEach((x) => (x.onclick = () => openDrawer(x.dataset.id)));
 }
 
 // ---------------------------------------------------------------------------
@@ -808,13 +826,21 @@ async function saveResolution(id) {
 // ---------------------------------------------------------------------------
 // Notifications
 // ---------------------------------------------------------------------------
+function notifScope() {
+  return state.role === 'agent' ? { audience: 'agent' } : { requester: state.user };
+}
+function notifQuery() {
+  const s = notifScope();
+  return s.audience ? 'audience=agent' : 'requester=' + encodeURIComponent(s.requester);
+}
+
 function wireBell() {
   $('#bell').onclick = (e) => {
     if (e.target.closest('.notif-panel')) return;
     const panel = $('#notifPanel');
     panel.hidden = !panel.hidden;
     if (!panel.hidden) {
-      api('/api/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ requester: state.user }) })
+      api('/api/notifications/read', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(notifScope()) })
         .then(refreshNotifications);
     }
   };
@@ -822,16 +848,16 @@ function wireBell() {
 }
 
 async function refreshNotifications() {
-  if (state.role === 'agent') return;
-  const items = await api('/api/notifications?requester=' + encodeURIComponent(state.user));
+  const items = await api('/api/notifications?' + notifQuery());
   const unread = items.filter((n) => !n.read).length;
   const badge = $('#bellBadge');
   badge.hidden = unread === 0;
   badge.textContent = unread;
   const panel = $('#notifPanel');
+  const emptyMsg = state.role === 'agent' ? 'No urgent tickets right now.' : 'No notifications yet.';
   panel.innerHTML = items.length
     ? items.slice(0, 20).map((n) => `<div class="notif-item ${n.read ? '' : 'unread'}">${esc(n.message)}<div class="t">${timeAgo(n.at)}</div></div>`).join('')
-    : `<div class="notif-empty">No notifications yet.</div>`;
+    : `<div class="notif-empty">${emptyMsg}</div>`;
 }
 
 // ---------------------------------------------------------------------------

@@ -122,7 +122,8 @@
         <h1 id="ticketsTitle">Tickets</h1>
         <div class="filters" id="filters">
           <div class="view-toggle" id="viewToggle">
-            <button data-mode="list" class="active">List</button>
+            <button data-mode="list" class="active">Cards</button>
+            <button data-mode="rows">List</button>
             <button data-mode="board">Board</button>
           </div>
           <select id="flt-cat"><option value="">All departments</option></select>
@@ -139,6 +140,7 @@
       <div class="tickets-layout" id="ticketsLayout">
         <div class="tickets-main">
           <div class="ticket-grid" id="ticketGrid"></div>
+          <div class="rows-list" id="rowsList" hidden></div>
           <div class="board" id="board" hidden></div>
         </div>
         <aside class="agent-rail" id="agentRail" hidden></aside>
