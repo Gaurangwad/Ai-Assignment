@@ -4,10 +4,10 @@ import { fileURLToPath } from 'url';
 import {
   DEPARTMENTS, PRIORITIES, STATUSES,
   listTickets, getTicket, createTicket, updateStatus, setResolution,
-  addReply, setCsat, agentStats, prioritizeQueue,
+  addReply, setCsat, bulkUpdate, agentStats, prioritizeQueue,
   resolvedTickets, listNotifications, markNotificationsRead, stats,
 } from './lib/store.js';
-import { assist, categorize, similarTickets, agentInsights, resolveQuery, runAction, ragAnswer, aiStatus } from './lib/ai.js';
+import { assist, categorize, similarTickets, agentInsights, resolveQuery, runAction, ragAnswer, groupDuplicates, aiStatus } from './lib/ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -76,9 +76,18 @@ app.post('/api/tickets/:id/csat', (req, res) => {
   res.json(t);
 });
 
+// Resolve (or otherwise update) a whole group of tickets at once.
+app.post('/api/tickets/bulk', (req, res) => {
+  const { ids, status, resolution } = req.body || {};
+  if (!Array.isArray(ids) || !ids.length) return res.status(400).json({ error: 'ids required' });
+  if (!STATUSES.includes(status)) return res.status(400).json({ error: 'invalid status' });
+  res.json({ updated: bulkUpdate(ids, status, resolution, 'Support Agent') });
+});
+
 // Agent dashboard data.
 app.get('/api/agent/stats', (req, res) => res.json(agentStats()));
 app.get('/api/agent/prioritize', (req, res) => res.json(prioritizeQueue()));
+app.get('/api/agent/groups', (req, res) => res.json(groupDuplicates(listTickets())));
 
 // --- AI layer -------------------------------------------------------------
 // Rich, in-flow assistant: routing + confidence, rephrased title/description,

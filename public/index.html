@@ -125,6 +125,7 @@
             <button data-mode="list" class="active">Cards</button>
             <button data-mode="rows">List</button>
             <button data-mode="board">Board</button>
+            <button data-mode="groups" id="groupsModeBtn">Groups</button>
           </div>
           <select id="flt-cat"><option value="">All departments</option></select>
           <select id="flt-pri">
@@ -144,6 +145,7 @@
           <div class="ticket-grid" id="ticketGrid"></div>
           <div class="rows-list" id="rowsList" hidden></div>
           <div class="board" id="board" hidden></div>
+          <div class="groups-list" id="groupsList" hidden></div>
         </div>
         <aside class="agent-rail" id="agentRail" hidden></aside>
       </div>
@@ -171,6 +173,7 @@
       </div>
       <div id="csvBanner" class="csv-banner" hidden></div>
       <div class="kpi-row" id="kpiRow"></div>
+      <div class="insights-bar" id="insightsBar"></div>
       <div class="panel chart-panel wide">
         <div class="chart-head">
           <h3 id="timelineTitle">Tickets over time</h3>
@@ -189,6 +192,10 @@
         <div class="panel chart-panel">
           <h3>By department</h3>
           <div id="chart-dept"></div>
+        </div>
+        <div class="panel chart-panel">
+          <h3>By priority</h3>
+          <div id="chart-priority"></div>
         </div>
         <div class="panel chart-panel" id="statusPanel">
           <h3>Status breakdown</h3>

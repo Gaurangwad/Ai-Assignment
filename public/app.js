@@ -348,6 +348,10 @@ function applyRoleVisibility() {
   const askBtn = $('#nav button[data-view="ask"]');
   if (analyticsBtn) analyticsBtn.style.display = isEmp ? 'none' : '';
   if (askBtn) askBtn.style.display = isEmp ? '' : 'none';
+  // Duplicate grouping is an agent operations tool.
+  const groupsBtn = $('#groupsModeBtn');
+  if (groupsBtn) groupsBtn.style.display = isEmp ? 'none' : '';
+  if (isEmp && state.ticketView === 'groups') { state.ticketView = 'list'; $$('#viewToggle button').forEach((x) => x.classList.toggle('active', x.dataset.mode === 'list')); }
   // RAG knowledge bot — agent only. Show the fab only when the panel is closed.
   const fab = $('#ragFab'), panel = $('#ragPanel');
   if (isEmp) { if (fab) fab.hidden = true; if (panel) panel.hidden = true; }
@@ -466,11 +470,13 @@ function renderAssist(a) {
     </div>`);
   }
 
-  // Similar tickets (keep match %)
-  if (a.similar && a.similar.length) {
+  // Previously-resolved duplicates — only surface a strong (>90%) match.
+  const dups = (a.similar || []).filter((s) => s.match > 90);
+  if (dups.length) {
     cards.push(`<div class="acard dup">
-      <div class="ahead">Possible duplicates</div>
-      ${a.similar.map((s) => `<div class="sim-item">
+      <div class="ahead">${ICON.check('#a9700a', 13)} Likely already resolved</div>
+      <div class="reason" style="margin-bottom:6px">This looks like a duplicate of a resolved ticket — you may not need to raise it.</div>
+      ${dups.map((s) => `<div class="sim-item">
         <div><strong>${esc(s.title)}</strong>
           <div class="meta">${esc(s.id)} · ${esc(s.status)}${s.resolution ? ' — ' + esc(s.resolution) : ''}</div>
         </div>
@@ -588,14 +594,57 @@ async function loadTickets() {
 
   const rows = await api('/api/tickets?' + params.toString());
   lastTicketRows = rows;
-  const mode = state.ticketView; // 'list' (cards) | 'rows' | 'board'
+  const mode = state.ticketView; // 'list' (cards) | 'rows' | 'board' | 'groups'
   $('#ticketGrid').hidden = mode !== 'list';
   $('#rowsList').hidden = mode !== 'rows';
   $('#board').hidden = mode !== 'board';
+  $('#groupsList').hidden = mode !== 'groups';
   if (mode === 'board') renderBoard(rows);
   else if (mode === 'rows') renderRows(rows);
+  else if (mode === 'groups') renderGroups();
   else renderList(rows);
   renderAgentRail();
+}
+
+// Group same-complaint + same-urgency open tickets so they can be resolved once.
+async function renderGroups() {
+  const el = $('#groupsList');
+  el.innerHTML = `<div class="rail-empty">Grouping duplicate tickets…</div>`;
+  let groups;
+  try { groups = await api('/api/agent/groups'); } catch { el.innerHTML = `<div class="empty">Could not load groups.</div>`; return; }
+  const multi = groups.filter((g) => g.size > 1);
+  const single = groups.filter((g) => g.size === 1);
+  if (!groups.length) { el.innerHTML = `<div class="empty">No open tickets to group.</div>`; return; }
+  const intro = multi.length
+    ? `<div class="groups-intro">${multi.length} duplicate group${multi.length > 1 ? 's' : ''} found — resolve each once to clear ${multi.reduce((a, g) => a + g.size, 0)} tickets.</div>`
+    : `<div class="groups-intro">No duplicates right now — every open ticket is distinct.</div>`;
+  const deck = (g, i) => `<div class="group-deck p-${g.priority}">
+      <div class="gd-head">
+        <div><span class="gd-count">${g.size}×</span> ${esc(g.title)}</div>
+        <div class="gd-meta"><span class="chip dept">${esc(g.category)}</span> ${priLabel(g.priority)}</div>
+      </div>
+      <div class="gd-stack">${g.tickets.map((t) => `<div class="gd-item" data-id="${t.id}"><span class="id">${t.id}</span> ${esc(t.title)} <span class="gd-req">${esc(t.requester)}</span></div>`).join('')}</div>
+      <button class="primary sm gd-resolve" data-ids="${g.tickets.map((t) => t.id).join(',')}">Resolve all ${g.size} at once</button>
+    </div>`;
+  el.innerHTML = intro
+    + (multi.length ? `<div class="groups-sec">${multi.map(deck).join('')}</div>` : '')
+    + (single.length ? `<h3 class="groups-h">Other open tickets</h3><div class="ticket-grid">${single.map((g) => singleGroupCard(g)).join('')}</div>` : '');
+  $$('#groupsList .gd-item, #groupsList .tcard').forEach((x) => (x.onclick = () => openDrawer(x.dataset.id)));
+  $$('#groupsList .gd-resolve').forEach((b) => (b.onclick = (e) => { e.stopPropagation(); resolveGroup(b.dataset.ids.split(',')); }));
+}
+function singleGroupCard(g) {
+  const t = g.tickets[0];
+  return `<div class="tcard p-${g.priority}" data-id="${t.id}">
+    <div class="id">${t.id}</div><h4>${esc(t.title)}</h4>
+    <div class="foot"><span class="dot ${g.priority}"></span><span class="chip dept">${esc(g.category)}</span><span class="chip">${esc(t.requester)}</span></div>
+  </div>`;
+}
+async function resolveGroup(ids) {
+  await api('/api/tickets/bulk', {
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ids, status: 'Resolved', resolution: 'Resolved together as a duplicate group.' }),
+  });
+  loadTickets(); refreshNotifications();
 }
 
 function renderRows(rows) {
@@ -1009,24 +1058,61 @@ let lastRecords = [];
 let tlState = { window: null, offset: 0 };
 
 async function loadAnalytics() {
-  let records, hasStatus;
+  let records, hasStatus, extra = {};
   if (state.analyticsSrc === 'csv') {
     if (!state.csv) return renderCsvPrompt();
     records = state.csv.records; hasStatus = state.csv.hasStatus;
     showBanner();
   } else {
-    const rows = await api('/api/tickets');
+    const [rows, st] = await Promise.all([api('/api/tickets'), api('/api/agent/stats').catch(() => null)]);
     records = rows.map((t) => ({ date: t.createdAt, department: t.category, status: t.status, priority: t.priority }));
     hasStatus = true;
+    if (st) extra = { avgResolutionHrs: st.avgResolutionHrs, avgFirstResponseHrs: st.avgFirstResponseHrs, csat: st.csat };
     $('#csvBanner').hidden = true;
   }
   lastRecords = records;
   tlState = { window: null, offset: 0 }; // reset zoom for new data/granularity
-  renderKpis(records, hasStatus);
+  renderKpis(records, hasStatus, extra);
+  renderInsights(records, hasStatus, extra);
   renderTimeline(records);
   renderDeptChart(records);
+  renderPriorityChart(records);
   renderStatusChart(records, hasStatus);
   renderHeatmap(records);
+}
+
+// Auto-generated plain-language highlights.
+function renderInsights(records, hasStatus, extra) {
+  if (!records.length) { $('#insightsBar').innerHTML = ''; return; }
+  const pills = [];
+  const byDept = {}; records.forEach((r) => (byDept[r.department] = (byDept[r.department] || 0) + 1));
+  const topDept = Object.entries(byDept).sort((a, b) => b[1] - a[1])[0];
+  if (topDept) pills.push(`Busiest team: <b>${esc(topDept[0])}</b> (${Math.round(topDept[1] / records.length * 100)}%)`);
+  const urgent = records.filter((r) => r.priority === 'urgent').length;
+  pills.push(`Urgent load: <b>${Math.round(urgent / records.length * 100)}%</b>`);
+  // Trend vs previous period.
+  const agg = aggregate(records, state.gran);
+  const sum = (p) => (p ? Object.values(p.counts).reduce((a, b) => a + b, 0) : 0);
+  const cur = sum(agg.periods.at(-1)), prv = sum(agg.periods.at(-2));
+  if (prv) { const d = Math.round((cur - prv) / prv * 100); pills.push(`Volume ${d >= 0 ? 'up' : 'down'} <b>${Math.abs(d)}%</b> vs last ${state.gran}`); }
+  if (hasStatus) {
+    const open = records.filter((r) => r.status === 'Open' || r.status === 'In Progress').length;
+    pills.push(`Open backlog: <b>${open}</b>`);
+  }
+  if (extra && extra.avgResolutionHrs != null) pills.push(`Avg resolution: <b>${extra.avgResolutionHrs}h</b>`);
+  if (extra && extra.csat != null) pills.push(`CSAT: <b>${extra.csat}%</b>`);
+  $('#insightsBar').innerHTML = pills.map((p) => `<span class="ins-pill">${p}</span>`).join('');
+}
+
+function renderPriorityChart(records) {
+  const colors = { urgent: '#e5484d', mild: '#d9a800', normal: '#2faf5f' };
+  const names = { urgent: 'Urgent', mild: 'Mild', normal: 'Non-urgent' };
+  const counts = { urgent: 0, mild: 0, normal: 0 };
+  records.forEach((r) => { if (counts[r.priority] != null) counts[r.priority]++; });
+  const total = records.length || 1;
+  const data = ['urgent', 'mild', 'normal'].filter((p) => counts[p])
+    .map((p) => ({ label: names[p], value: counts[p], color: colors[p], pct: Math.round(counts[p] / total * 100) }));
+  $('#chart-priority').innerHTML = data.length ? barChartH(data) : `<div class="empty">No data.</div>`;
 }
 
 function tlZoom(dir) {
@@ -1064,7 +1150,7 @@ function aggregate(records, gran) {
   };
 }
 
-function renderKpis(records, hasStatus) {
+function renderKpis(records, hasStatus, extra = {}) {
   const agg = aggregate(records, state.gran);
   const sum = (p) => (p ? Object.values(p.counts).reduce((a, b) => a + b, 0) : 0);
   const cur = sum(agg.periods.at(-1)), prv = sum(agg.periods.at(-2));
@@ -1075,7 +1161,8 @@ function renderKpis(records, hasStatus) {
   const cards = [['Total', records.length, agg.periods.length ? arrow : '']];
   if (hasStatus) {
     const c = {}; records.forEach((r) => { if (r.status) c[r.status] = (c[r.status] || 0) + 1; });
-    cards.push(['Open', c.Open || 0, ''], ['In Progress', c['In Progress'] || 0, ''], ['Resolved', (c.Resolved || 0) + (c.Closed || 0), '']);
+    cards.push(['Open', c.Open || 0, ''], ['Resolved', (c.Resolved || 0) + (c.Closed || 0), '']);
+    cards.push(['Avg resolution', extra.avgResolutionHrs != null ? `${extra.avgResolutionHrs}h` : '—', '']);
   } else {
     const depts = new Set(records.map((r) => r.department)).size;
     const dates = records.map((r) => +new Date(r.date)).filter(Boolean);
@@ -1155,12 +1242,26 @@ function lineAreaChart(labels, series) {
   series.forEach((s, si) => {
     const gid = `tl${si}`;
     defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${s.color}" stop-opacity="0.30"/><stop offset="1" stop-color="${s.color}" stop-opacity="0"/></linearGradient>`;
-    const pts = s.points.map((v, i) => `${x(i)},${y(v)}`);
-    const area = `M ${x(0)},${y(0)} L ${pts.join(' L ')} L ${x(n - 1)},${y(0)} Z`;
+    const xy = s.points.map((v, i) => [x(i), y(v)]);
+    const linePath = smoothPath(xy);
+    const area = `${linePath} L ${x(n - 1)},${y(0)} L ${x(0)},${y(0)} Z`;
     const dots = s.points.map((v, i) => `<circle class="dot-pt has-tip" cx="${x(i)}" cy="${y(v)}" r="3.5" fill="${s.color}" data-tip="${esc(s.name)} · ${esc(labels[i])}: ${v} ticket${v === 1 ? '' : 's'}"/>`).join('');
-    paths += `<path d="${area}" fill="url(#${gid})"/><path d="M ${pts.join(' L ')}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
+    paths += `<path d="${area}" fill="url(#${gid})"/><path d="${linePath}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
   });
   return `<svg viewBox="0 0 ${W} ${H}"><defs>${defs}</defs>${grid}<line x1="${padL}" y1="${y(0)}" x2="${W - padR}" y2="${y(0)}" stroke="${line}"/>${paths}${xlab}</svg>`;
+}
+
+// Catmull-Rom -> cubic bezier for a smooth line through the points.
+function smoothPath(p) {
+  if (p.length < 2) return p.length ? `M ${p[0][0]},${p[0][1]}` : '';
+  let d = `M ${p[0][0]},${p[0][1]}`;
+  for (let i = 0; i < p.length - 1; i++) {
+    const p0 = p[i - 1] || p[i], p1 = p[i], p2 = p[i + 1], p3 = p[i + 2] || p2;
+    const c1x = p1[0] + (p2[0] - p0[0]) / 6, c1y = p1[1] + (p2[1] - p0[1]) / 6;
+    const c2x = p2[0] - (p3[0] - p1[0]) / 6, c2y = p2[1] - (p3[1] - p1[1]) / 6;
+    d += ` C ${c1x},${c1y} ${c2x},${c2y} ${p2[0]},${p2[1]}`;
+  }
+  return d;
 }
 
 // Modern horizontal bar chart (HTML/CSS) with hover insight via data-tip.
@@ -1279,6 +1380,7 @@ function renderCsvPrompt() {
   $('#chart-timeline').innerHTML = `<div class="empty">Import a CSV of issues (date + department, optional status/priority) to see real-time timeline analytics. Use “Sample” for the format.</div>`;
   $('#timelineLegend').innerHTML = ''; $('#chart-dept').innerHTML = ''; $('#statusPanel').style.display = 'none';
   $('#heatmap').innerHTML = ''; $('#heatCaption').textContent = '';
+  $('#insightsBar').innerHTML = ''; $('#chart-priority').innerHTML = '';
 }
 function downloadSampleCsv() {
   const deps = ['IT', 'HR', 'Finance', 'Admin'], pr = ['urgent', 'mild', 'normal'], st = ['Open', 'In Progress', 'Resolved', 'Closed'];
