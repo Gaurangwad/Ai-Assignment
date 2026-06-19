@@ -348,10 +348,10 @@ function applyRoleVisibility() {
   const askBtn = $('#nav button[data-view="ask"]');
   if (analyticsBtn) analyticsBtn.style.display = isEmp ? 'none' : '';
   if (askBtn) askBtn.style.display = isEmp ? '' : 'none';
-  // RAG knowledge bot — agent only.
+  // RAG knowledge bot — agent only. Show the fab only when the panel is closed.
   const fab = $('#ragFab'), panel = $('#ragPanel');
-  if (isEmp) { if (fab) fab.style.display = 'none'; if (panel) panel.hidden = true; }
-  else if (fab && panel) { fab.style.display = panel.hidden ? '' : 'none'; }
+  if (isEmp) { if (fab) fab.hidden = true; if (panel) panel.hidden = true; }
+  else if (fab && panel) { fab.hidden = !panel.hidden; }
   // Redirect away from a view the current role can't access.
   if (isEmp && currentView === 'analytics') switchView('ask');
   if (!isEmp && currentView === 'ask') switchView('tickets');
@@ -663,14 +663,14 @@ async function renderAgentRail() {
 let ragGreeted = false;
 function wireRag() {
   $('#ragFab').onclick = () => {
-    $('#ragPanel').hidden = false; $('#ragFab').style.display = 'none';
+    $('#ragPanel').hidden = false; $('#ragFab').hidden = true;
     if (!ragGreeted) {
       ragGreeted = true;
       ragBubble('bot', 'Hi! I learn from your tickets and help docs. Ask me anything in plain words — for example, “how do we usually fix VPN drops?” or “who reported access card issues?”.');
     }
     $('#ragBox').focus();
   };
-  $('#ragClose').onclick = () => { $('#ragPanel').hidden = true; $('#ragFab').style.display = ''; };
+  $('#ragClose').onclick = () => { $('#ragPanel').hidden = true; $('#ragFab').hidden = false; };
   $('#ragSend').onclick = ragSend;
   $('#ragBox').addEventListener('keydown', (e) => { if (e.key === 'Enter') ragSend(); });
 }

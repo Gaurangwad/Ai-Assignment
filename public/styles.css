@@ -18,6 +18,10 @@
 }
 
 * { box-sizing: border-box; }
+/* The [hidden] attribute must always win, even over the display:grid/flex rules
+   below (author CSS otherwise beats the UA [hidden]{display:none}, leaving
+   "hidden" panels, boards and the chat bot visible all the time). */
+[hidden] { display: none !important; }
 body {
   margin: 0;
   background: var(--bg);
