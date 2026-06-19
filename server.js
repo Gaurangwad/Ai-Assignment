@@ -4,6 +4,7 @@ import { fileURLToPath } from 'url';
 import {
   DEPARTMENTS, PRIORITIES, STATUSES,
   listTickets, getTicket, createTicket, updateStatus, setResolution,
+  addReply, setCsat, agentStats, prioritizeQueue,
   resolvedTickets, listNotifications, markNotificationsRead, stats,
 } from './lib/store.js';
 import { assist, categorize, similarTickets, agentInsights, resolveQuery, runAction, aiStatus } from './lib/ai.js';
@@ -58,6 +59,26 @@ app.patch('/api/tickets/:id/resolution', (req, res) => {
   if (!t) return res.status(404).json({ error: 'Not found' });
   res.json(t);
 });
+
+// Agent sends a reply to the employee (auto-moves Open -> In Progress).
+app.post('/api/tickets/:id/reply', (req, res) => {
+  const { message, agent } = req.body || {};
+  if (!message || !message.trim()) return res.status(400).json({ error: 'message is required' });
+  const t = addReply(req.params.id, message.trim(), agent);
+  if (!t) return res.status(404).json({ error: 'Not found' });
+  res.json(t);
+});
+
+// Employee satisfaction rating.
+app.post('/api/tickets/:id/csat', (req, res) => {
+  const t = setCsat(req.params.id, (req.body && req.body.rating) ? 1 : 0);
+  if (!t) return res.status(404).json({ error: 'Not found' });
+  res.json(t);
+});
+
+// Agent dashboard data.
+app.get('/api/agent/stats', (req, res) => res.json(agentStats()));
+app.get('/api/agent/prioritize', (req, res) => res.json(prioritizeQueue()));
 
 // --- AI layer -------------------------------------------------------------
 // Rich, in-flow assistant: routing + confidence, rephrased title/description,

@@ -532,6 +532,45 @@ async function loadTickets() {
   $('#ticketGrid').hidden = board;
   $('#board').hidden = !board;
   board ? renderBoard(rows) : renderList(rows);
+  renderAgentRail();
+}
+
+// ---------------------------------------------------------------------------
+// Agent rail: personal mini-stats + AI "tackle next" prioritisation
+// ---------------------------------------------------------------------------
+async function renderAgentRail() {
+  const rail = $('#agentRail'), layout = $('#ticketsLayout');
+  if (state.role !== 'agent') { rail.hidden = true; layout.classList.remove('with-rail'); return; }
+  rail.hidden = false; layout.classList.add('with-rail');
+  try {
+    const [s, p] = await Promise.all([api('/api/agent/stats'), api('/api/agent/prioritize')]);
+    const fr = s.avgFirstResponseHrs == null ? '—' : `${s.avgFirstResponseHrs}h`;
+    const csat = s.csat == null ? '—' : `${s.csat}%`;
+    const tiles = `
+      <div class="stat-grid">
+        <div class="stat hi"><div class="sv">${s.assignedToday}</div><div class="sl">Assigned today</div></div>
+        <div class="stat hi"><div class="sv">${s.resolvedToday}</div><div class="sl">Resolved today</div></div>
+        <div class="stat"><div class="sv">${s.avgResolvedDaily}</div><div class="sl">Avg / day</div></div>
+        <div class="stat"><div class="sv">${s.totalResolved}</div><div class="sl">Total resolved</div></div>
+        <div class="stat"><div class="sv">${fr}</div><div class="sl">First response</div></div>
+        <div class="stat csat"><div class="sv">${csat}</div><div class="sl">CSAT${s.csatCount ? ` · ${s.csatCount}` : ''}</div></div>
+      </div>`;
+    const list = (p.items || []).map((it) => `<div class="next-item" data-id="${it.id}">
+        <div class="ni-top">${priLabel(it.priority)}<span class="ni-est">~${it.estHours}h</span></div>
+        <div class="ni-title">${esc(it.title)}</div>
+      </div>`).join('') || `<div class="rail-empty">Queue is clear.</div>`;
+    rail.innerHTML = `
+      <div class="rail-card">
+        <div class="rail-head"><span>Your stats</span></div>
+        ${tiles}
+      </div>
+      <div class="rail-card">
+        <div class="rail-head"><span>${ICON.ai('#2f6df6', 14)} Tackle next</span></div>
+        <div class="next-list">${list}</div>
+        <div class="micro">Ordered by urgency and ease — <i>easier resolution is estimated from how long similar (urgent) tickets took to resolve before.</i></div>
+      </div>`;
+    $$('#agentRail .next-item').forEach((el) => (el.onclick = () => openDrawer(el.dataset.id)));
+  } catch { rail.innerHTML = ''; }
 }
 
 function renderList(rows) {
@@ -613,12 +652,31 @@ async function openDrawer(id) {
       ${isAgent ? statusFlow(t) : `<div class="agent-only-note" style="margin-top:8px">You'll be notified automatically as this moves. Switch to the Agent view to update it.</div>`}
     </div>
 
+    ${(t.replies && t.replies.length) ? `
+    <div class="section">
+      <h3>Conversation</h3>
+      ${t.replies.map((r) => `<div class="reply-bubble"><div class="rb-head">${esc(r.agent)} · ${timeAgo(r.at)}</div>${esc(r.message)}</div>`).join('')}
+    </div>` : ''}
+
+    ${(!isAgent && (t.status === 'Resolved' || t.status === 'Closed')) ? `
+    <div class="section">
+      <h3>How did we do?</h3>
+      ${t.csat == null
+        ? `<div class="csat-row"><button class="csat up" data-r="1">${THUMB_UP} Helpful</button><button class="csat down" data-r="0">${THUMB_DOWN} Not really</button></div>`
+        : `<div class="csat-done">${t.csat >= 1 ? THUMB_UP + ' Thanks for the feedback!' : THUMB_DOWN + ' Thanks — we\'ll do better.'}</div>`}
+    </div>` : ''}
+
     ${isAgent ? `
     <div class="section">
       <h3>AI agent assist</h3>
       <button class="ghost" id="btnDraft">${ICON.ai()} Analyse & draft reply</button>
       <div id="insights" class="insights" hidden></div>
       <textarea class="draft-box" id="draftBox" placeholder="Click analyse to get a summary, suggested resolution steps, and a drafted first reply…"></textarea>
+      <div class="draft-actions">
+        <button class="primary sm" id="btnSendReply">Send reply to employee</button>
+        <button class="ghost sm" id="btnResolveWith">Resolve with this</button>
+      </div>
+      <div class="micro">“Send reply” posts the draft to the employee and moves the ticket to <b>In Progress</b>. “Resolve with this” saves the AI resolution note and marks it <b>Resolved</b>.</div>
     </div>
     <div class="section">
       <h3>Resolution notes</h3>
@@ -634,6 +692,7 @@ async function openDrawer(id) {
     </div>`;
 
   drawer.hidden = false; overlay.hidden = false;
+  lastInsights = null;
   $('#drawerClose').onclick = closeDrawer;
   overlay.onclick = closeDrawer;
 
@@ -641,9 +700,45 @@ async function openDrawer(id) {
     $$('.status-flow button').forEach((b) => (b.onclick = () => changeStatus(t.id, b.dataset.s)));
     $('#btnDraft').onclick = () => generateDraft(t.id);
     $('#btnSaveRes').onclick = () => saveResolution(t.id);
+    $('#btnSendReply').onclick = () => sendReply(t.id);
+    $('#btnResolveWith').onclick = () => resolveWith(t.id);
+  } else {
+    $$('.csat').forEach((b) => (b.onclick = () => rateTicket(t.id, b.dataset.r)));
   }
 }
 function closeDrawer() { $('#drawer').hidden = true; $('#drawerOverlay').hidden = true; }
+
+const THUMB_UP = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M7 10v11M2 13v6a2 2 0 0 0 2 2h13.3a2 2 0 0 0 2-1.7l1.2-7A2 2 0 0 0 17.8 10H13l.8-4.2A2 2 0 0 0 11.9 3L7 10"/></svg>`;
+const THUMB_DOWN = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 14V3M22 11V5a2 2 0 0 0-2-2H6.7a2 2 0 0 0-2 1.7l-1.2 7A2 2 0 0 0 5.2 14H10l-.8 4.2A2 2 0 0 0 11.1 21L17 14"/></svg>`;
+
+async function sendReply(id) {
+  const msg = ($('#draftBox').value || '').trim();
+  const btn = $('#btnSendReply');
+  if (!msg) { btn.textContent = 'Write or generate a reply first'; setTimeout(() => (btn.textContent = 'Send reply to employee'), 1600); return; }
+  btn.disabled = true; btn.textContent = 'Sending…';
+  try {
+    await api(`/api/tickets/${id}/reply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: msg, agent: 'Support Agent' }) });
+    await openDrawer(id);
+    loadTickets(); refreshNotifications();
+  } catch (e) { btn.disabled = false; btn.textContent = 'Send reply to employee'; }
+}
+
+async function resolveWith(id) {
+  const resText = (lastInsights && lastInsights.resolution) || ($('#resBox').value || '').trim() || 'Resolved after troubleshooting with the employee.';
+  const btn = $('#btnResolveWith');
+  btn.disabled = true; btn.textContent = 'Resolving…';
+  try {
+    await api(`/api/tickets/${id}/resolution`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ resolution: resText }) });
+    await api(`/api/tickets/${id}/status`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'Resolved', agent: 'Support Agent', note: 'Resolved using AI-suggested resolution' }) });
+    await openDrawer(id);
+    loadTickets(); refreshNotifications();
+  } catch (e) { btn.disabled = false; btn.textContent = 'Resolve with this'; }
+}
+
+async function rateTicket(id, rating) {
+  await api(`/api/tickets/${id}/csat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ rating: Number(rating) }) });
+  openDrawer(id);
+}
 
 function statusFlow(t) {
   const flow = state.meta.statuses;
@@ -671,17 +766,23 @@ async function changeStatus(id, status) {
   renderHomeRail();
 }
 
+let lastInsights = null;
+
 async function generateDraft(id) {
   const box = $('#draftBox'), btn = $('#btnDraft'), ins = $('#insights');
   btn.innerHTML = `<span class="spin">${ICON.ai()}</span> Analysing…`;
   try {
     const r = await api(`/api/ai/draft/${id}`, { method: 'POST' });
+    lastInsights = r;
     box.value = r.draft || '';
     ins.hidden = false;
     ins.innerHTML =
       `<div class="ins-card"><div class="ahead">${ICON.ai('#6b7686', 13)} Summary</div><div>${esc(r.summary || '')}</div></div>` +
+      (r.resolution
+        ? `<div class="ins-card"><div class="ahead">Suggested resolution</div><div>${esc(r.resolution)}</div></div>`
+        : '') +
       (r.steps && r.steps.length
-        ? `<div class="ins-card"><div class="ahead">Suggested resolution steps</div><ol class="steps">${r.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>`
+        ? `<div class="ins-card"><div class="ahead">Resolution steps</div><ol class="steps">${r.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol></div>`
         : '') +
       (r.similar && r.similar.length
         ? `<div class="ins-card"><div class="ahead">Drawn from</div>${r.similar.map((s) => `<div class="meta">${esc(s.id)} · ${esc(s.title)} <span class="pct">${s.match}%</span></div>`).join('')}</div>`
