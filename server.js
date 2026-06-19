@@ -7,7 +7,7 @@ import {
   addReply, setCsat, agentStats, prioritizeQueue,
   resolvedTickets, listNotifications, markNotificationsRead, stats,
 } from './lib/store.js';
-import { assist, categorize, similarTickets, agentInsights, resolveQuery, runAction, aiStatus } from './lib/ai.js';
+import { assist, categorize, similarTickets, agentInsights, resolveQuery, runAction, ragAnswer, aiStatus } from './lib/ai.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -114,6 +114,12 @@ app.post('/api/ai/action', (req, res) => {
   const { action, requester } = req.body || {};
   res.json(runAction(action, { requester }));
 });
+
+// RAG knowledge bot — retrieves over all live tickets + KB on every call.
+app.post('/api/ai/rag', asyncH(async (req, res) => {
+  const { question } = req.body || {};
+  res.json(await ragAnswer({ question }, listTickets()));
+}));
 
 // Agent insights: summary + resolution steps + drafted first response.
 app.post('/api/ai/draft/:id', asyncH(async (req, res) => {

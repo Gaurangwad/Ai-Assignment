@@ -135,6 +135,8 @@
           </select>
           <select id="flt-status"><option value="">All statuses</option></select>
           <input id="flt-q" type="search" placeholder="Search…" />
+          <button class="ghost sm" id="exportCsvBtn">Export CSV</button>
+          <button class="ghost sm" id="statsToggle" hidden>Hide stats</button>
         </div>
       </div>
       <div class="tickets-layout" id="ticketsLayout">
@@ -207,6 +209,27 @@
   <!-- ============ TICKET DETAIL DRAWER ============ -->
   <div class="drawer-overlay" id="drawerOverlay" hidden></div>
   <aside class="drawer" id="drawer" hidden></aside>
+
+  <!-- ============ RAG KNOWLEDGE BOT (floating) ============ -->
+  <button id="ragFab" class="rag-fab" title="Ask the knowledge bot" aria-label="Open knowledge bot">
+    <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+      <rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M9 4h6"/><circle cx="9" cy="13" r="1.2" fill="currentColor" stroke="none"/><circle cx="15" cy="13" r="1.2" fill="currentColor" stroke="none"/><path d="M2 12v3M22 12v3"/>
+    </svg>
+  </button>
+  <div class="rag-panel" id="ragPanel" hidden>
+    <div class="rag-head">
+      <span class="rag-title">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="8" width="16" height="11" rx="3"/><path d="M12 8V4M9 4h6"/></svg>
+        Knowledge bot
+      </span>
+      <button id="ragClose" class="rag-close" aria-label="Close">✕</button>
+    </div>
+    <div class="rag-log" id="ragLog"></div>
+    <div class="rag-input">
+      <input id="ragBox" type="text" placeholder="Ask about tickets or how-tos…" autocomplete="off" />
+      <button id="ragSend" class="primary sm">Ask</button>
+    </div>
+  </div>
 
   <script src="app.js"></script>
 </body>

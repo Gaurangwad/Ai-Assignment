@@ -13,6 +13,7 @@ const state = {
   analyticsSrc: 'live',
   gran: 'month',
   csv: null,
+  railOpen: true,
 };
 const USERS = ['Priya Sharma', 'Daniel Kim', 'Aisha Khan', 'Tom Reyes', 'Lena Fischer', 'Marco Bianchi'];
 
@@ -64,6 +65,7 @@ async function boot() {
   wireTheme();
   wireAnalytics();
   wireChartTip();
+  wireRag();
   applyRoleVisibility();
   renderHomeRail();
   refreshNotifications();
@@ -546,6 +548,23 @@ function wireFilters() {
       loadTickets();
     };
   });
+  $('#exportCsvBtn').onclick = () => downloadTicketsCsv(lastTicketRows);
+  $('#statsToggle').onclick = () => { state.railOpen = !state.railOpen; renderAgentRail(); };
+}
+
+let lastTicketRows = [];
+
+function downloadTicketsCsv(rows) {
+  if (!rows || !rows.length) return;
+  const head = ['id', 'title', 'department', 'priority', 'status', 'requester', 'createdAt', 'updatedAt'];
+  const cell = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`;
+  const lines = [head.join(',')].concat(
+    rows.map((t) => [t.id, t.title, t.category, t.priority, t.status, t.requester, t.createdAt, t.updatedAt].map(cell).join(','))
+  );
+  const blob = new Blob([lines.join('\n')], { type: 'text/csv' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'tickets.csv'; a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function loadTickets() {
@@ -559,6 +578,7 @@ async function loadTickets() {
   $('#ticketsTitle').textContent = state.role === 'employee' ? `My tickets` : 'Department queues';
 
   const rows = await api('/api/tickets?' + params.toString());
+  lastTicketRows = rows;
   const mode = state.ticketView; // 'list' (cards) | 'rows' | 'board'
   $('#ticketGrid').hidden = mode !== 'list';
   $('#rowsList').hidden = mode !== 'rows';
@@ -587,8 +607,14 @@ function renderRows(rows) {
 // Agent rail: personal mini-stats + AI "tackle next" prioritisation
 // ---------------------------------------------------------------------------
 async function renderAgentRail() {
-  const rail = $('#agentRail'), layout = $('#ticketsLayout');
-  if (state.role !== 'agent') { rail.hidden = true; layout.classList.remove('with-rail'); return; }
+  const rail = $('#agentRail'), layout = $('#ticketsLayout'), toggle = $('#statsToggle');
+  if (state.role !== 'agent') {
+    rail.hidden = true; layout.classList.remove('with-rail');
+    if (toggle) toggle.hidden = true;
+    return;
+  }
+  if (toggle) { toggle.hidden = false; toggle.textContent = state.railOpen ? 'Hide stats' : 'Show stats'; }
+  if (!state.railOpen) { rail.hidden = true; layout.classList.remove('with-rail'); return; }
   rail.hidden = false; layout.classList.add('with-rail');
   try {
     const [s, p] = await Promise.all([api('/api/agent/stats'), api('/api/agent/prioritize')]);
@@ -609,7 +635,7 @@ async function renderAgentRail() {
       </div>`).join('') || `<div class="rail-empty">Queue is clear.</div>`;
     rail.innerHTML = `
       <div class="rail-card">
-        <div class="rail-head"><span>Your stats</span></div>
+        <div class="rail-head"><span>Your stats</span><button class="rail-x" id="railClose" title="Hide panel">✕</button></div>
         ${tiles}
       </div>
       <div class="rail-card">
@@ -618,7 +644,54 @@ async function renderAgentRail() {
         <div class="micro">Ordered by urgency and ease — <i>easier resolution is estimated from how long similar (urgent) tickets took to resolve before.</i></div>
       </div>`;
     $$('#agentRail .next-item').forEach((el) => (el.onclick = () => openDrawer(el.dataset.id)));
+    $('#railClose').onclick = () => { state.railOpen = false; renderAgentRail(); };
   } catch { rail.innerHTML = ''; }
+}
+
+// ---------------------------------------------------------------------------
+// RAG knowledge bot (floating, bottom-right)
+// ---------------------------------------------------------------------------
+let ragGreeted = false;
+function wireRag() {
+  $('#ragFab').onclick = () => {
+    $('#ragPanel').hidden = false; $('#ragFab').style.display = 'none';
+    if (!ragGreeted) {
+      ragGreeted = true;
+      ragBubble('bot', 'Hi! I learn from your tickets and help docs. Ask me anything in plain words — for example, “how do we usually fix VPN drops?” or “who reported access card issues?”.');
+    }
+    $('#ragBox').focus();
+  };
+  $('#ragClose').onclick = () => { $('#ragPanel').hidden = true; $('#ragFab').style.display = ''; };
+  $('#ragSend').onclick = ragSend;
+  $('#ragBox').addEventListener('keydown', (e) => { if (e.key === 'Enter') ragSend(); });
+}
+function ragBubble(role, html) {
+  const log = $('#ragLog');
+  const div = document.createElement('div');
+  div.className = `rag-bubble ${role}`;
+  div.innerHTML = html;
+  log.appendChild(div);
+  log.scrollTop = log.scrollHeight;
+  return div;
+}
+async function ragSend() {
+  const box = $('#ragBox');
+  const question = box.value.trim();
+  if (!question) return;
+  box.value = '';
+  ragBubble('user', esc(question));
+  const thinking = ragBubble('bot', `<span class="spin">${ICON.ai('#6b7686', 13)}</span> Searching tickets & docs…`);
+  try {
+    const r = await api('/api/ai/rag', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ question }) });
+    let html = esc(r.reply);
+    if (r.sources && r.sources.length) {
+      html += `<div class="rag-src">Sources: ${r.sources.map((s) => `<span>${esc(s.id)} (${s.match}%)</span>`).join(' ')}</div>`;
+    }
+    thinking.innerHTML = html;
+  } catch (e) {
+    thinking.innerHTML = `Sorry, I hit a problem: ${esc(e.message)}`;
+  }
+  $('#ragLog').scrollTop = $('#ragLog').scrollHeight;
 }
 
 function renderList(rows) {
