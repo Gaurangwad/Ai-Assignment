@@ -170,7 +170,17 @@
       <div id="csvBanner" class="csv-banner" hidden></div>
       <div class="kpi-row" id="kpiRow"></div>
       <div class="panel chart-panel wide">
-        <div class="chart-head"><h3 id="timelineTitle">Tickets over time</h3><div class="legend" id="timelineLegend"></div></div>
+        <div class="chart-head">
+          <h3 id="timelineTitle">Tickets over time</h3>
+          <div class="tl-controls">
+            <span class="tl-range" id="tlRange"></span>
+            <button id="tlPanL" title="Older">‹</button>
+            <button id="tlZoomOut" title="Zoom out">−</button>
+            <button id="tlZoomIn" title="Zoom in">+</button>
+            <button id="tlPanR" title="Newer">›</button>
+          </div>
+        </div>
+        <div class="legend" id="timelineLegend"></div>
         <div id="chart-timeline"></div>
       </div>
       <div class="charts">
@@ -182,6 +192,14 @@
           <h3>Status breakdown</h3>
           <div id="chart-status"></div>
         </div>
+      </div>
+      <div class="panel chart-panel wide" id="heatmapPanel">
+        <div class="chart-head">
+          <h3>Where complaints concentrate</h3>
+          <div class="heat-legend">Least <span class="heat-scale"></span> Most</div>
+        </div>
+        <div id="heatmap"></div>
+        <div class="micro" id="heatCaption"></div>
       </div>
     </section>
   </main>

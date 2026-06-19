@@ -63,10 +63,29 @@ async function boot() {
   wireChat();
   wireTheme();
   wireAnalytics();
+  wireChartTip();
+  applyRoleVisibility();
   renderHomeRail();
   refreshNotifications();
   setInterval(refreshNotifications, 15000);
   showAIStatus();
+}
+
+// Floating tooltip for charts (bars, points, heatmap cells with data-tip).
+function wireChartTip() {
+  const tip = document.createElement('div');
+  tip.id = 'chartTip'; tip.className = 'chart-tip';
+  document.body.appendChild(tip);
+  document.addEventListener('mousemove', (e) => {
+    const el = e.target.closest && e.target.closest('[data-tip]');
+    if (el) {
+      tip.textContent = el.getAttribute('data-tip');
+      tip.style.display = 'block';
+      const x = Math.min(window.innerWidth - tip.offsetWidth - 10, e.clientX + 14);
+      tip.style.left = Math.max(8, x) + 'px';
+      tip.style.top = (e.clientY + 14) + 'px';
+    } else { tip.style.display = 'none'; }
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -309,12 +328,22 @@ function wireNav() {
   $$('#nav button').forEach((b) => (b.onclick = () => switchView(b.dataset.view)));
 }
 function switchView(view) {
+  // Analytics is agent-only.
+  if (view === 'analytics' && state.role !== 'agent') view = 'ask';
   currentView = view;
   $$('#nav button').forEach((b) => b.classList.toggle('active', b.dataset.view === view));
   $$('.view').forEach((v) => (v.hidden = v.id !== `view-${view}`));
   if (view === 'tickets') loadTickets();
   if (view === 'analytics') loadAnalytics();
   if (view === 'ask') renderHomeRail();
+}
+
+// Show/hide role-restricted UI (employees can't see Analytics).
+function applyRoleVisibility() {
+  const isEmp = state.role === 'employee';
+  const btn = $('#nav button[data-view="analytics"]');
+  if (btn) btn.style.display = isEmp ? 'none' : '';
+  if (isEmp && currentView === 'analytics') switchView('ask');
 }
 function wireRoleSwitch() {
   $$('#roleSwitch button').forEach((b) => {
@@ -323,6 +352,7 @@ function wireRoleSwitch() {
       $$('#roleSwitch button').forEach((x) => x.classList.toggle('active', x === b));
       $('#userSelect').style.display = state.role === 'agent' ? 'none' : '';
       $('#bell').title = state.role === 'agent' ? 'Urgent ticket alerts' : 'Notifications';
+      applyRoleVisibility();
       refreshNotifications();
       if (currentView === 'tickets') loadTickets();
     };
@@ -885,8 +915,16 @@ function wireAnalytics() {
   $('#importCsvBtn').onclick = triggerCsv;
   $('#sampleCsvBtn').onclick = downloadSampleCsv;
   $('#csvFile').addEventListener('change', handleCsvFile);
+  // Timeline zoom / pan
+  $('#tlZoomIn').onclick = () => tlZoom(-1);
+  $('#tlZoomOut').onclick = () => tlZoom(1);
+  $('#tlPanL').onclick = () => tlPan(1);
+  $('#tlPanR').onclick = () => tlPan(-1);
 }
 function triggerCsv() { $('#csvFile').click(); }
+
+let lastRecords = [];
+let tlState = { window: null, offset: 0 };
 
 async function loadAnalytics() {
   let records, hasStatus;
@@ -900,10 +938,24 @@ async function loadAnalytics() {
     hasStatus = true;
     $('#csvBanner').hidden = true;
   }
+  lastRecords = records;
+  tlState = { window: null, offset: 0 }; // reset zoom for new data/granularity
   renderKpis(records, hasStatus);
   renderTimeline(records);
   renderDeptChart(records);
   renderStatusChart(records, hasStatus);
+  renderHeatmap(records);
+}
+
+function tlZoom(dir) {
+  if (tlState.window == null) return;
+  if (dir < 0) tlState.window = Math.max(3, Math.round(tlState.window / 1.5));
+  else tlState.window = tlState.window + Math.max(1, Math.round(tlState.window * 0.5));
+  renderTimeline(lastRecords);
+}
+function tlPan(dir) {
+  tlState.offset += dir * Math.max(1, Math.round((tlState.window || 6) / 2));
+  renderTimeline(lastRecords);
 }
 
 // ---- aggregation by granularity ----
@@ -954,15 +1006,39 @@ function renderKpis(records, hasStatus) {
 function renderTimeline(records) {
   const agg = aggregate(records, state.gran);
   $('#timelineTitle').textContent = `Tickets over time · ${GRAN_LABEL[state.gran]}`;
-  if (!agg.labels.length) { $('#chart-timeline').innerHTML = `<div class="empty">No data for this view.</div>`; $('#timelineLegend').innerHTML = ''; return; }
-  $('#chart-timeline').innerHTML = lineAreaChart(agg.labels, agg.series);
-  $('#timelineLegend').innerHTML = agg.series.map((s) => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('');
+  const total = agg.labels.length;
+  const ctl = $('.tl-controls');
+  if (!total) {
+    $('#chart-timeline').innerHTML = `<div class="empty">No data for this view.</div>`;
+    $('#timelineLegend').innerHTML = ''; $('#tlRange').textContent = ''; if (ctl) ctl.style.visibility = 'hidden';
+    return;
+  }
+  if (ctl) ctl.style.visibility = 'visible';
+  // Apply zoom window.
+  if (tlState.window == null) tlState.window = Math.min(total, 12);
+  tlState.window = Math.max(3, Math.min(tlState.window, total));
+  tlState.offset = Math.max(0, Math.min(tlState.offset, total - tlState.window));
+  const end = total - tlState.offset;
+  const start = Math.max(0, end - tlState.window);
+  const labels = agg.labels.slice(start, end);
+  const series = agg.series.map((s) => ({ ...s, points: s.points.slice(start, end) }));
+  const visTotal = series.reduce((a, s) => a + s.points.reduce((x, y) => x + y, 0), 0);
+  $('#tlRange').textContent = `${labels[0]} – ${labels[labels.length - 1]} · ${visTotal} tickets`;
+  // Disable controls at bounds.
+  $('#tlZoomOut').disabled = tlState.window >= total;
+  $('#tlZoomIn').disabled = tlState.window <= 3;
+  $('#tlPanR').disabled = tlState.offset <= 0;
+  $('#tlPanL').disabled = start <= 0;
+  $('#chart-timeline').innerHTML = lineAreaChart(labels, series);
+  $('#timelineLegend').innerHTML = series.map((s) => `<span><i style="background:${s.color}"></i>${esc(s.name)}</span>`).join('');
 }
 
 function renderDeptChart(records) {
   const counts = {}; records.forEach((r) => (counts[r.department] = (counts[r.department] || 0) + 1));
-  const data = Object.entries(counts).sort((a, b) => b[1] - a[1]).map(([k, v], i) => ({ label: k, value: v, color: deptColor(k, i) }));
-  $('#chart-dept').innerHTML = data.length ? barChartV(data) : `<div class="empty">No data.</div>`;
+  const total = Object.values(counts).reduce((a, b) => a + b, 0) || 1;
+  const data = Object.entries(counts).sort((a, b) => b[1] - a[1])
+    .map(([k, v], i) => ({ label: k, value: v, color: deptColor(k, i), pct: Math.round(v / total * 100) }));
+  $('#chart-dept').innerHTML = data.length ? barChartH(data) : `<div class="empty">No data.</div>`;
 }
 
 function renderStatusChart(records, hasStatus) {
@@ -999,28 +1075,23 @@ function lineAreaChart(labels, series) {
     defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${s.color}" stop-opacity="0.30"/><stop offset="1" stop-color="${s.color}" stop-opacity="0"/></linearGradient>`;
     const pts = s.points.map((v, i) => `${x(i)},${y(v)}`);
     const area = `M ${x(0)},${y(0)} L ${pts.join(' L ')} L ${x(n - 1)},${y(0)} Z`;
-    const dots = s.points.map((v, i) => `<circle class="dot-pt" cx="${x(i)}" cy="${y(v)}" r="3" fill="${s.color}"><title>${esc(s.name)} · ${esc(labels[i])}: ${v}</title></circle>`).join('');
+    const dots = s.points.map((v, i) => `<circle class="dot-pt has-tip" cx="${x(i)}" cy="${y(v)}" r="3.5" fill="${s.color}" data-tip="${esc(s.name)} · ${esc(labels[i])}: ${v} ticket${v === 1 ? '' : 's'}"/>`).join('');
     paths += `<path d="${area}" fill="url(#${gid})"/><path d="M ${pts.join(' L ')}" fill="none" stroke="${s.color}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>${dots}`;
   });
   return `<svg viewBox="0 0 ${W} ${H}"><defs>${defs}</defs>${grid}<line x1="${padL}" y1="${y(0)}" x2="${W - padR}" y2="${y(0)}" stroke="${line}"/>${paths}${xlab}</svg>`;
 }
 
-function barChartV(data) {
-  const W = 360, H = 220, padL = 26, padR = 10, padT = 18, padB = 32;
-  const line = cssVar('--line');
+// Modern horizontal bar chart (HTML/CSS) with hover insight via data-tip.
+function barChartH(data) {
   const max = Math.max(1, ...data.map((d) => d.value));
-  const bw = (W - padL - padR) / data.length;
-  const y = (v) => padT + (1 - v / max) * (H - padT - padB);
-  let defs = '', bars = '';
-  data.forEach((d, i) => {
-    const gid = `bg${i}`, c = d.color;
-    defs += `<linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="${c}"/><stop offset="1" stop-color="${c}" stop-opacity="0.7"/></linearGradient>`;
-    const bx = padL + i * bw + bw * 0.2, w = bw * 0.6, by = y(d.value), bh = (H - padB) - by;
-    bars += `<rect class="bar-rect" x="${bx}" y="${by}" width="${w}" height="${bh}" rx="6" fill="url(#${gid})"><title>${esc(d.label)}: ${d.value}</title></rect>
-      <text class="val" x="${bx + w / 2}" y="${by - 6}" text-anchor="middle" font-size="11">${d.value}</text>
-      <text x="${bx + w / 2}" y="${H - padB + 15}" text-anchor="middle" font-size="10.5">${esc(d.label)}</text>`;
-  });
-  return `<svg viewBox="0 0 ${W} ${H}"><defs>${defs}</defs><line x1="${padL}" y1="${H - padB}" x2="${W - padR}" y2="${H - padB}" stroke="${line}"/>${bars}</svg>`;
+  return `<div class="hbars">${data.map((d) => {
+    const w = Math.round(d.value / max * 100);
+    return `<div class="hbar has-tip" data-tip="${esc(d.label)} · ${d.value} ticket${d.value === 1 ? '' : 's'} · ${d.pct}% of total">
+      <div class="hb-label">${esc(d.label)}</div>
+      <div class="hb-track"><div class="hb-fill" style="width:${w}%;background:linear-gradient(90deg, ${d.color}, ${d.color}b3)"></div></div>
+      <div class="hb-val">${d.value}<span class="hb-pct">${d.pct}%</span></div>
+    </div>`;
+  }).join('')}</div>`;
 }
 
 function donutModern(data) {
@@ -1035,6 +1106,32 @@ function donutModern(data) {
   });
   const legend = data.map((d) => `<span><i style="background:${d.color}"></i>${esc(d.label)} (${d.value})</span>`).join('');
   return `<svg viewBox="0 0 180 180" width="180" height="180" style="margin:0 auto">${segs}<text x="90" y="86" text-anchor="middle" font-size="22" font-weight="700" fill="${cssVar('--ink')}">${total}</text><text x="90" y="104" text-anchor="middle" font-size="11" fill="${cssVar('--muted')}">total</text></svg><div class="legend">${legend}</div>`;
+}
+
+// Department × time heatmap — where complaints concentrate (most vs least).
+function renderHeatmap(records) {
+  const agg = aggregate(records, state.gran);
+  const total = agg.labels.length;
+  if (!total) { $('#heatmap').innerHTML = `<div class="empty">No data.</div>`; $('#heatCaption').textContent = ''; return; }
+  const cap = 14, start = Math.max(0, total - cap);
+  const labels = agg.labels.slice(start);
+  const rows = agg.series.map((s) => ({ name: s.name, points: s.points.slice(start) }));
+  const flat = rows.flatMap((r) => r.points);
+  const max = Math.max(1, ...flat);
+  // intensity 0..1 -> light to strong accent
+  const shade = (v) => v === 0 ? 'var(--bg)' : `rgba(229,72,77,${(0.14 + 0.86 * (v / max)).toFixed(3)})`;
+  let hotR = '', hotC = '', hot = -1, coldV = Infinity, coldR = '', coldC = '';
+  rows.forEach((r) => r.points.forEach((v, c) => {
+    if (v > hot) { hot = v; hotR = r.name; hotC = labels[c]; }
+    if (v < coldV) { coldV = v; coldR = r.name; coldC = labels[c]; }
+  }));
+  const head = `<div class="hm-row hm-head"><div class="hm-rowlabel"></div>${labels.map((l) => `<div class="hm-col">${esc(l)}</div>`).join('')}</div>`;
+  const body = rows.map((r) => `<div class="hm-row">
+      <div class="hm-rowlabel">${esc(r.name)}</div>
+      ${r.points.map((v, c) => `<div class="hm-cell has-tip" style="background:${shade(v)};${v > max * 0.66 ? 'color:#fff' : ''}" data-tip="${esc(r.name)} · ${esc(labels[c])}: ${v} complaint${v === 1 ? '' : 's'}">${v || ''}</div>`).join('')}
+    </div>`).join('');
+  $('#heatmap').innerHTML = `<div class="hm-grid" style="grid-template-columns:90px repeat(${labels.length}, minmax(34px, 1fr))">${head}${body}</div>`;
+  $('#heatCaption').innerHTML = `Most complaints: <b>${esc(hotR)}</b> in <b>${esc(hotC)}</b> (${hot}). Quietest: <b>${esc(coldR)}</b> in ${esc(coldC)} (${coldV}). Darker = more complaints — use it to spot where operations need attention.`;
 }
 
 // ---- CSV import ----
@@ -1099,6 +1196,7 @@ function renderCsvPrompt() {
   $('#kpiRow').innerHTML = '';
   $('#chart-timeline').innerHTML = `<div class="empty">Import a CSV of issues (date + department, optional status/priority) to see real-time timeline analytics. Use “Sample” for the format.</div>`;
   $('#timelineLegend').innerHTML = ''; $('#chart-dept').innerHTML = ''; $('#statusPanel').style.display = 'none';
+  $('#heatmap').innerHTML = ''; $('#heatCaption').textContent = '';
 }
 function downloadSampleCsv() {
   const deps = ['IT', 'HR', 'Finance', 'Admin'], pr = ['urgent', 'mild', 'normal'], st = ['Open', 'In Progress', 'Resolved', 'Closed'];

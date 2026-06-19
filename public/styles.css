@@ -435,3 +435,35 @@ html[data-theme="dark"] input, html[data-theme="dark"] textarea, html[data-theme
 @keyframes fade { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
 .spin { display: inline-block; animation: rot 1s linear infinite; }
 @keyframes rot { to { transform: rotate(360deg); } }
+
+/* ---------- Timeline zoom controls ---------- */
+.tl-controls { display: flex; align-items: center; gap: 6px; visibility: hidden; }
+.tl-range { font-size: 11px; color: var(--muted); margin-right: 4px; }
+.tl-controls button { width: 26px; height: 26px; border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 7px; cursor: pointer; font-size: 14px; line-height: 1; }
+.tl-controls button:hover:not(:disabled) { border-color: var(--accent); color: var(--accent); }
+.tl-controls button:disabled { opacity: .35; cursor: default; }
+
+/* ---------- Modern horizontal bar chart ---------- */
+.hbars { display: flex; flex-direction: column; gap: 11px; padding-top: 4px; }
+.hbar { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 10px; cursor: default; }
+.hb-label { font-size: 12.5px; font-weight: 600; color: var(--ink); }
+.hb-track { background: var(--bg); border-radius: 20px; height: 18px; overflow: hidden; }
+.hb-fill { height: 100%; border-radius: 20px; transition: width .5s cubic-bezier(.2,.8,.2,1); min-width: 2px; }
+.hbar:hover .hb-fill { filter: brightness(1.06); }
+.hb-val { font-size: 13px; font-weight: 700; min-width: 50px; text-align: right; }
+.hb-pct { font-size: 11px; color: var(--muted); font-weight: 600; margin-left: 5px; }
+
+/* ---------- Chart tooltip ---------- */
+.chart-tip { position: fixed; z-index: 100; display: none; pointer-events: none; background: var(--ink); color: var(--bg); font-size: 12px; font-weight: 500; padding: 6px 9px; border-radius: 7px; box-shadow: 0 6px 20px rgba(0,0,0,.25); max-width: 260px; }
+html[data-theme="dark"] .chart-tip { background: #e7ecf3; color: #10161f; }
+.has-tip { cursor: pointer; }
+
+/* ---------- Heatmap ---------- */
+.heat-legend { display: flex; align-items: center; gap: 8px; font-size: 11px; color: var(--muted); }
+.heat-scale { display: inline-block; width: 110px; height: 10px; border-radius: 6px; background: linear-gradient(90deg, var(--bg), rgba(229,72,77,.25), rgba(229,72,77,1)); border: 1px solid var(--line); }
+.hm-grid { display: grid; gap: 4px; overflow-x: auto; }
+.hm-row { display: grid; grid-template-columns: subgrid; grid-column: 1 / -1; gap: 4px; }
+.hm-head .hm-col { font-size: 10.5px; color: var(--muted); text-align: center; padding-bottom: 2px; white-space: nowrap; }
+.hm-rowlabel { font-size: 12px; font-weight: 600; display: flex; align-items: center; }
+.hm-cell { height: 30px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: var(--ink); transition: transform .1s ease; }
+.hm-cell.has-tip:hover { transform: scale(1.08); outline: 2px solid var(--accent); }
